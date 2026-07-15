@@ -2,7 +2,7 @@
 
 ## Phase 1 — Basic Combat Prototype
 
-* [ ] Replace the Box3D demo with a simple combat room
+* [x] Replace the Box3D demo with a simple combat room
 * [ ] Add first-person camera and mouse look
 * [ ] Add player capsule
 * [ ] Add movement, jump, and dash

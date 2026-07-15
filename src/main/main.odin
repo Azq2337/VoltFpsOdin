@@ -4,20 +4,18 @@ import rl "vendor:raylib"
 import b3 "vendor:box3d"
 
 main :: proc() {
-	rl.InitWindow(1280, 720, "Volt FPS Odin")
-	rl.SetTargetFPS(60)
+	init()
+	defer shutdown()
+	loop()
+}
 
-	camera := rl.Camera3D{
-		position   = {0, 4, 10},
-		target     = {0, 2, 0},
-		up         = {0, 1, 0},
-		fovy       = 70,
-		projection = .PERSPECTIVE,
-	}
+init :: proc() {
+	rl.InitWindow(1280, 720, "Volt FPS Odin")
+	rl.SetTargetFPS(FRAMERATE)
 
 	world_def := b3.DefaultWorldDef()
 	world_def.gravity = {0, -9.8, 0}
-	world_id := b3.CreateWorld(world_def)
+	world_id = b3.CreateWorld(world_def)
 
 	for box in ROOM_BOXES {
 		_ = create_static_box(
@@ -26,12 +24,11 @@ main :: proc() {
 			box.half_size,
 		)
 	}
+}
 
-	time_step:      f32 = 1. / 60.
-	sub_step_count: i32 = 4
-
+loop :: proc() {
 	for !rl.WindowShouldClose() {
-		b3.World_Step(world_id, time_step, sub_step_count)
+		b3.World_Step(world_id, TIME_STEP, SUB_STEP_COUNT)
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.RAYWHITE)
 		rl.BeginMode3D(camera)
@@ -41,7 +38,9 @@ main :: proc() {
 		rl.DrawText("Volt FPS Odin", 10, 35, 20, rl.DARKGRAY)
 		rl.EndDrawing()
 	}
+}
 
+shutdown :: proc() {
 	b3.DestroyWorld(world_id)
 	rl.CloseWindow()
 }
