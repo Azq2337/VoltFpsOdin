@@ -5,11 +5,13 @@ import b3 "vendor:box3d"
 
 /* constants */
 // backend
-FRAMERATE :: 60
-TIME_STEP :: 1. / FRAMERATE
-SUB_STEP_COUNT :: 4
+FRAMERATE               :: 60
+TIME_STEP               :: 1. / FRAMERATE
+SUB_STEP_COUNT          :: 4
+// camera
+DEBUG_CAMERA_SPEED      :: 8.0
 // control
-MOUSE_SENSITIVITY :: 0.1
+MOUSE_SENSITIVITY       :: 0.1
 // player
 PLAYER_RADIUS           :: 0.4
 PLAYER_HALF_HEIGHT      :: 0.6
@@ -19,8 +21,10 @@ PLAYER_JUMP_SPEED       :: 6.0
 PLAYER_DASH_SPEED       :: 14.0
 PLAYER_DASH_DURATION    :: 0.18
 PLAYER_DASH_COOLDOWN    :: 0.35
-// camera
-DEBUG_CAMERA_SPEED :: 8.0
+// enemy
+ENEMY_RADIUS            :: 0.4
+ENEMY_HALF_HEIGHT       :: 0.6
+ENEMY_MAX_HEALTH        :: 100.0
 
 /* global variable - initialized */
 // game state
@@ -41,4 +45,4 @@ debug_camera_enabled := false
 /* global variable - uninitialized */
 world_id :      b3.WorldId
 player:         Player
-
+enemy:          Enemy

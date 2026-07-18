@@ -16,3 +16,9 @@ Player :: struct {
 	dash_cooldown_left: f32,
 	dash_direction:     rl.Vector3,
 }
+
+Enemy :: struct {
+	body_id:    b3.BodyId,
+	health:     f32,
+	max_health: f32,
+}

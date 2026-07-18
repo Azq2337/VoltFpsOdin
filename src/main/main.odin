@@ -20,6 +20,7 @@ init :: proc() {
 	world_id = b3.CreateWorld(world_def)
 
 	player = create_player(world_id)
+	enemy = create_enemy(world_id, {0, 1, -5})
 
 	for box in ROOM_BOXES {
 		_ = create_static_box(
@@ -46,6 +47,7 @@ loop :: proc() {
 		{
 			defer rl.EndMode3D()
 			draw_room()
+			draw_enemy()
 			draw_player_debug()
 		}
 		if paused {

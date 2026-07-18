@@ -5,6 +5,28 @@ import b3 "vendor:box3d"
 import "core:math"
 
 /* Create */
+create_static_box :: proc(
+	world_id: b3.WorldId,
+	center, half_size: rl.Vector3,
+) -> b3.BodyId 
+{
+	body_def := b3.DefaultBodyDef()
+	body_def.position = {center.x, center.y, center.z}
+
+	body_id := b3.CreateBody(world_id, body_def)
+
+	hull := b3.MakeBoxHull(
+		half_size.x,
+		half_size.y,
+		half_size.z,
+	)
+
+	shape_def := b3.DefaultShapeDef()
+	_ = b3.CreateHullShape(body_id, shape_def, &hull.base)
+
+	return body_id
+}
+
 create_player :: proc(world_id: b3.WorldId) -> Player {
 	body_def := b3.DefaultBodyDef()
 	body_def.type = .dynamicBody
@@ -36,36 +58,30 @@ create_player :: proc(world_id: b3.WorldId) -> Player {
 	}
 }
 
-draw_room :: proc() {
-	for box in ROOM_BOXES {
-		size := box.half_size * 2
-		rl.DrawCube(box.center, size.x, size.y, size.z, box.color)
-		rl.DrawCubeWires(box.center, size.x, size.y, size.z, rl.DARKGRAY)
-	}
-}
-
-create_static_box :: proc(
-	world_id: b3.WorldId,
-	center, half_size: rl.Vector3,
-) -> b3.BodyId 
-{
+create_enemy :: proc(world_id: b3.WorldId, position: rl.Vector3) -> Enemy {
 	body_def := b3.DefaultBodyDef()
-	body_def.position = {center.x, center.y, center.z}
+	body_def.type = .kinematicBody
+	body_def.position = {position.x, position.y, position.z}
 
 	body_id := b3.CreateBody(world_id, body_def)
 
-	hull := b3.MakeBoxHull(
-		half_size.x,
-		half_size.y,
-		half_size.z,
-	)
+	capsule := b3.Capsule{
+		center1 = {0, -ENEMY_HALF_HEIGHT, 0},
+		center2 = {0,  ENEMY_HALF_HEIGHT, 0},
+		radius  = ENEMY_RADIUS,
+	}
 
 	shape_def := b3.DefaultShapeDef()
-	_ = b3.CreateHullShape(body_id, shape_def, &hull.base)
+	_ = b3.CreateCapsuleShape(body_id, shape_def, &capsule)
 
-	return body_id
+	return Enemy{
+		body_id    = body_id,
+		health     = ENEMY_MAX_HEALTH,
+		max_health = ENEMY_MAX_HEALTH,
+	}
 }
 
+/* Draw*/
 draw_pause_menu :: proc() {
 	center_x := rl.GetScreenWidth() / 2
 	menu_x := center_x - 150
@@ -103,6 +119,14 @@ draw_pause_menu :: proc() {
 	}
 }
 
+draw_room :: proc() {
+	for box in ROOM_BOXES {
+		size := box.half_size * 2
+		rl.DrawCube(box.center, size.x, size.y, size.z, box.color)
+		rl.DrawCubeWires(box.center, size.x, size.y, size.z, rl.DARKGRAY)
+	}
+}
+
 draw_player_debug :: proc() {
 	if !debug_camera_enabled {
 		return
@@ -117,6 +141,40 @@ draw_player_debug :: proc() {
 		8,
 		8,
 		rl.RED,
+	)
+}
+
+draw_enemy :: proc() {
+	pos := b3.Body_GetPosition(enemy.body_id)
+
+	start := rl.Vector3{
+		pos.x,
+		pos.y - ENEMY_HALF_HEIGHT,
+		pos.z,
+	}
+
+	end := rl.Vector3{
+		pos.x,
+		pos.y + ENEMY_HALF_HEIGHT,
+		pos.z,
+	}
+
+	rl.DrawCapsule(
+		start,
+		end,
+		ENEMY_RADIUS,
+		8,
+		8,
+		rl.RED,
+	)
+
+	rl.DrawCapsuleWires(
+		start,
+		end,
+		ENEMY_RADIUS,
+		8,
+		8,
+		rl.MAROON,
 	)
 }
 

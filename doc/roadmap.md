@@ -7,10 +7,11 @@
 * [x] Add player capsule
 * [x] Add movement, jump, and dash
 * [x] Add debug camera
-* [ ] Add pause menu
-* [ ] Add enemy capsule with health
+* [x] Add pause menu
+* [x] Add enemy capsule with health
 * [ ] Add projectile shooting and damage
 * [ ] Add crosshair and enemy-health HUD
+* [ ] Add third person camera
 
 **Milestone:** Walk around, shoot an enemy, reduce its health, and kill it.
 
