@@ -3,7 +3,10 @@ Arcadey FPS inspired by modern 2D platformers.
 
 # Quickstart
 ```bash
+# Win11
 .\script\run.bat
+# Linux
+./script/run.sh
 ```
 
 # Toolchain
