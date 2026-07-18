@@ -36,9 +36,15 @@ loop :: proc() {
 		if rl.IsKeyPressed(.ESCAPE) do toggle_pause()
 		if !paused {
 			if rl.IsKeyPressed(.F3) do toggle_debug_camera()
-			if !debug_camera_enabled do update_player()
+			if !debug_camera_enabled {
+				update_player()
+			}
 			b3.World_Step(world_id, TIME_STEP, SUB_STEP_COUNT)
 			update_camera()
+			if !debug_camera_enabled {
+				shoot_projectile()
+			}
+			update_projectiles()
 		}
 
 		rl.BeginDrawing()
@@ -49,6 +55,7 @@ loop :: proc() {
 			draw_room()
 			draw_enemy()
 			draw_player_debug()
+			draw_projectiles()
 		}
 		if paused {
 			draw_pause_menu()

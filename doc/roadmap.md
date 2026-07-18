@@ -9,7 +9,7 @@
 * [x] Add debug camera
 * [x] Add pause menu
 * [x] Add enemy capsule with health
-* [ ] Add projectile shooting and damage
+* [x] Add projectile shooting and damage
 * [ ] Add crosshair and enemy-health HUD
 * [ ] Add third person camera
 

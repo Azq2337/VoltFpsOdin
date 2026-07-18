@@ -25,6 +25,13 @@ PLAYER_DASH_COOLDOWN    :: 0.35
 ENEMY_RADIUS            :: 0.4
 ENEMY_HALF_HEIGHT       :: 0.6
 ENEMY_MAX_HEALTH        :: 100.0
+// projectile
+MAX_PROJECTILES         :: 64
+PROJECTILE_RADIUS       :: 0.08
+PROJECTILE_SPEED        :: 25.0
+PROJECTILE_DAMAGE       :: 25.0
+PROJECTILE_MAX_RANGE    :: 50.0
+PROJECTILE_SPAWN_OFFSET :: 0.5
 
 /* global variable - initialized */
 // game state
@@ -46,3 +53,5 @@ debug_camera_enabled := false
 world_id :      b3.WorldId
 player:         Player
 enemy:          Enemy
+projectiles: 	[MAX_PROJECTILES]Projectile
+

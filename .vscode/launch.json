@@ -5,6 +5,14 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "win11",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceRoot}/build/main.exe",
+            "args": [],
+            "cwd": "${workspaceRoot}"
+        },
+        {
             "name": "linux",
             "type": "lldb",
             "request": "launch",

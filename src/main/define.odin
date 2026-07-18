@@ -22,3 +22,16 @@ Enemy :: struct {
 	health:     f32,
 	max_health: f32,
 }
+
+Projectile :: struct {
+	position:         rl.Vector3,
+	velocity:         rl.Vector3,
+	distance_traveled: f32,
+	active:           bool,
+}
+
+Projectile_Cast_Result :: struct {
+	hit:      bool,
+	shape_id: b3.ShapeId,
+	fraction: f32,
+}
