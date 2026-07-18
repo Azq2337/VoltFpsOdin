@@ -10,6 +10,11 @@ TIME_STEP :: 1. / FRAMERATE
 SUB_STEP_COUNT :: 4
 // control
 MOUSE_SENSITIVITY :: 0.1
+// player
+PLAYER_RADIUS      :: 0.4
+PLAYER_HALF_HEIGHT :: 0.6
+PLAYER_EYE_HEIGHT  :: 0.7
+PLAYER_SPEED       :: 6.0
 
 /* global variable - initialized */
 // camera
@@ -25,4 +30,5 @@ camera_pitch: f32 = 0
 
 /* global variable - uninitialized */
 world_id :      b3.WorldId
+player: 		Player
 

@@ -18,6 +18,8 @@ init :: proc() {
 	world_def.gravity = {0, -9.8, 0}
 	world_id = b3.CreateWorld(world_def)
 
+	player = create_player(world_id)
+
 	for box in ROOM_BOXES {
 		_ = create_static_box(
 			world_id,
@@ -29,9 +31,10 @@ init :: proc() {
 
 loop :: proc() {
 	for !rl.WindowShouldClose() {
+		update_player()
+		b3.World_Step(world_id, TIME_STEP, SUB_STEP_COUNT)
 		update_camera()
 
-		b3.World_Step(world_id, TIME_STEP, SUB_STEP_COUNT)
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.RAYWHITE)
 		rl.BeginMode3D(camera)
