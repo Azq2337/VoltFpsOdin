@@ -60,6 +60,9 @@ loop :: proc() {
 		if paused {
 			draw_pause_menu()
 		} else {
+			draw_crosshair()
+			draw_enemy_health_bar()
+
 			rl.DrawFPS(10, 10)
 			rl.DrawText("Volt FPS Odin", 10, 35, 20, rl.DARKGRAY)
 		}

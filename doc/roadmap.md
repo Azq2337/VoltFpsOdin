@@ -10,8 +10,9 @@
 * [x] Add pause menu
 * [x] Add enemy capsule with health
 * [x] Add projectile shooting and damage
-* [ ] Add crosshair and enemy-health HUD
+* [x] Add crosshair and enemy-health HUD
 * [ ] Add third person camera
+* [ ] Restructuring: split helper script, create sub folders and/or packages
 
 **Milestone:** Walk around, shoot an enemy, reduce its health, and kill it.
 

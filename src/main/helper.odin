@@ -191,6 +191,70 @@ draw_projectiles :: proc() {
 	}
 }
 
+draw_crosshair :: proc() {
+	x := rl.GetScreenWidth() / 2
+	y := rl.GetScreenHeight() / 2
+
+	gap    :: CROSSHAIR_GAP
+	length :: CROSSHAIR_LENGTH
+
+	// top
+	rl.DrawLine(x, y - gap - length, x, y - gap, rl.BLACK)
+
+	// bottom
+	rl.DrawLine(x, y + gap, x, y + gap + length, rl.BLACK)
+
+	// left
+	rl.DrawLine(x - gap - length, y, x - gap, y, rl.BLACK)
+
+	// right
+	rl.DrawLine(x + gap, y, x + gap + length, y, rl.BLACK)
+}
+
+draw_enemy_health_bar :: proc() {
+	enemy_pos := b3.Body_GetPosition(enemy.body_id)
+
+	world_pos := rl.Vector3{
+		enemy_pos.x,
+		enemy_pos.y + ENEMY_HALF_HEIGHT + ENEMY_RADIUS + ENEMY_HEALTH_BAR_OFFSET,
+		enemy_pos.z,
+	}
+
+	// check if enemy is behind player so health bar is not drawn
+	to_enemy := world_pos - camera.position
+	camera_forward := camera.target - camera.position
+	dot :=
+		to_enemy.x * camera_forward.x +
+		to_enemy.y * camera_forward.y +
+		to_enemy.z * camera_forward.z
+	if dot <= 0 {
+		return
+	}
+
+	screen_pos := rl.GetWorldToScreen(world_pos, camera)
+
+	health_ratio := enemy.health / enemy.max_health
+
+	bar_x := i32(screen_pos.x) - ENEMY_HEALTH_BAR_WIDTH / 2
+	bar_y := i32(screen_pos.y)
+
+	rl.DrawRectangle(
+		bar_x,
+		bar_y,
+		ENEMY_HEALTH_BAR_WIDTH,
+		ENEMY_HEALTH_BAR_HEIGHT,
+		rl.DARKGRAY,
+	)
+
+	rl.DrawRectangle(
+		bar_x,
+		bar_y,
+		i32(f32(ENEMY_HEALTH_BAR_WIDTH) * health_ratio),
+		ENEMY_HEALTH_BAR_HEIGHT,
+		rl.RED,
+	)
+}
+
 /* Update */
 update_player :: proc() {
 	velocity := b3.Body_GetLinearVelocity(player.body_id)
