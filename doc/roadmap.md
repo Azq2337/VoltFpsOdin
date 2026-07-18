@@ -2,13 +2,19 @@
 
 ## Phase 1 — Basic Combat Prototype
 
-* [ ] Replace the Box3D demo with a simple combat room
-* [ ] Add first-person camera and mouse look
-* [ ] Add player capsule
-* [ ] Add movement, jump, and dash
-* [ ] Add enemy capsule with health
-* [ ] Add projectile shooting and damage
-* [ ] Add crosshair and enemy-health HUD
+* [x] Replace the Box3D demo with a simple combat room
+* [x] Add first-person camera and mouse look
+* [x] Add player capsule
+* [x] Add movement, jump, and dash
+* [x] Add debug camera
+* [x] Add pause menu
+* [x] Add enemy capsule with health
+* [x] Add projectile shooting and damage
+* [x] Add crosshair and enemy-health HUD
+* [x] Add third person camera
+* - [x] fix going through wall issue
+* - [x] update ground collision
+* [x] Restructuring: split helper script, create sub folders and/or packages
 
 **Milestone:** Walk around, shoot an enemy, reduce its health, and kill it.
 
