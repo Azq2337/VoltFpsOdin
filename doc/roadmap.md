@@ -6,7 +6,7 @@
 * [x] Add first-person camera and mouse look
 * [x] Add player capsule
 * [x] Add movement, jump, and dash
-* [ ] Add debug camera
+* [x] Add debug camera
 * [ ] Add pause menu
 * [ ] Add enemy capsule with health
 * [ ] Add projectile shooting and damage

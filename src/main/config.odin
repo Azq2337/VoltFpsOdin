@@ -19,6 +19,8 @@ PLAYER_JUMP_SPEED       :: 6.0
 PLAYER_DASH_SPEED       :: 14.0
 PLAYER_DASH_DURATION    :: 0.18
 PLAYER_DASH_COOLDOWN    :: 0.35
+// camera
+DEBUG_CAMERA_SPEED :: 8.0
 
 /* global variable - initialized */
 // camera
@@ -31,6 +33,7 @@ camera := rl.Camera3D {
 }
 camera_yaw:   f32 = 0
 camera_pitch: f32 = 0
+debug_camera_enabled := false
 
 /* global variable - uninitialized */
 world_id :      b3.WorldId

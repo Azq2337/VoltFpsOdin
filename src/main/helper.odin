@@ -66,6 +66,23 @@ create_static_box :: proc(
 	return body_id
 }
 
+draw_player_debug :: proc() {
+	if !debug_camera_enabled {
+		return
+	}
+
+	pos := b3.Body_GetPosition(player.body_id)
+
+	rl.DrawCapsuleWires(
+		{pos.x, pos.y - PLAYER_HALF_HEIGHT, pos.z},
+		{pos.x, pos.y + PLAYER_HALF_HEIGHT, pos.z},
+		PLAYER_RADIUS,
+		8,
+		8,
+		rl.RED,
+	)
+}
+
 /* Update */
 update_player :: proc() {
 	velocity := b3.Body_GetLinearVelocity(player.body_id)
@@ -109,32 +126,50 @@ update_player :: proc() {
 
 update_camera :: proc() {
 	mouse_delta := rl.GetMouseDelta()
-
 	camera_yaw   += mouse_delta.x * MOUSE_SENSITIVITY
 	camera_pitch -= mouse_delta.y * MOUSE_SENSITIVITY
-
 	camera_pitch = clamp(camera_pitch, -89, 89)
-
 	yaw   := math.to_radians(camera_yaw)
 	pitch := math.to_radians(camera_pitch)
-
-	direction := rl.Vector3{
+	forward := rl.Vector3{
 		math.cos(pitch) * math.sin(yaw),
 		math.sin(pitch),
 		-math.cos(pitch) * math.cos(yaw),
 	}
 
-	player_pos := b3.Body_GetPosition(player.body_id)
-	camera.position = {
-		player_pos.x,
-		player_pos.y + PLAYER_EYE_HEIGHT,
-		player_pos.z,
+	if debug_camera_enabled {
+		update_debug_camera(forward)
+	} else {
+		player_pos := b3.Body_GetPosition(player.body_id)
+		camera.position = {
+			player_pos.x,
+			player_pos.y + PLAYER_EYE_HEIGHT,
+			player_pos.z,
+		}
 	}
-	camera.target = {
-		camera.position.x + direction.x,
-		camera.position.y + direction.y,
-		camera.position.z + direction.z,
+
+	camera.target = camera.position + forward
+}
+
+update_debug_camera :: proc(forward: rl.Vector3) {
+	right := rl.Vector3{
+		math.cos(math.to_radians(camera_yaw)),
+		0,
+		math.sin(math.to_radians(camera_yaw)),
 	}
+
+	move := rl.Vector3{}
+	if rl.IsKeyDown(.W) { move += forward }
+	if rl.IsKeyDown(.S) { move -= forward }
+	if rl.IsKeyDown(.D) { move += right }
+	if rl.IsKeyDown(.A) { move -= right }
+	if rl.IsKeyDown(.E) { move.y += 1 }
+	if rl.IsKeyDown(.Q) { move.y -= 1 }
+
+	length := math.sqrt(move.x * move.x + move.y * move.y + move.z * move.z)
+	if length > 0 do move /= length
+
+	camera.position += move * DEBUG_CAMERA_SPEED * TIME_STEP
 }
 
 /* Check */
@@ -145,4 +180,17 @@ is_player_grounded :: proc() -> bool {
 	return contact_count > 0 && velocity.y <= 0.1
 }
 
+/* Feature */
+toggle_debug_camera :: proc() {
+	if rl.IsKeyPressed(.F3) {
+		debug_camera_enabled = !debug_camera_enabled
+
+		if debug_camera_enabled {
+			velocity := b3.Body_GetLinearVelocity(player.body_id)
+			velocity.x = 0
+			velocity.z = 0
+			b3.Body_SetLinearVelocity(player.body_id, velocity)
+		}
+	}
+}
 

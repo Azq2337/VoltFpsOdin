@@ -31,7 +31,8 @@ init :: proc() {
 
 loop :: proc() {
 	for !rl.WindowShouldClose() {
-		update_player()
+		toggle_debug_camera()
+		if !debug_camera_enabled do update_player()
 		b3.World_Step(world_id, TIME_STEP, SUB_STEP_COUNT)
 		update_camera()
 
@@ -41,6 +42,7 @@ loop :: proc() {
 		{
 			defer rl.EndMode3D()
 			draw_room()
+			draw_player_debug()
 		}
 		rl.DrawFPS(10, 10)
 		rl.DrawText("Volt FPS Odin", 10, 35, 20, rl.DARKGRAY)
