@@ -35,6 +35,7 @@ loop :: proc() {
 	for game_running && !rl.WindowShouldClose() {
 		if rl.IsKeyPressed(.ESCAPE) do toggle_pause()
 		if !paused {
+			if rl.IsKeyPressed(.F2) do toggle_third_person_camera()
 			if rl.IsKeyPressed(.F3) do toggle_debug_camera()
 			if !debug_camera_enabled {
 				update_player()
@@ -54,8 +55,9 @@ loop :: proc() {
 			defer rl.EndMode3D()
 			draw_room()
 			draw_enemy()
-			draw_player_debug()
+			draw_player()
 			draw_projectiles()
+			draw_aim_debug_ray()
 		}
 		if paused {
 			draw_pause_menu()

@@ -11,7 +11,9 @@
 * [x] Add enemy capsule with health
 * [x] Add projectile shooting and damage
 * [x] Add crosshair and enemy-health HUD
-* [ ] Add third person camera
+* [x] Add third person camera
+* - [ ] fix going through wall issue
+* - [ ] update ground collision
 * [ ] Restructuring: split helper script, create sub folders and/or packages
 
 **Milestone:** Walk around, shoot an enemy, reduce its health, and kill it.

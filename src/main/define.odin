@@ -33,5 +33,6 @@ Projectile :: struct {
 Projectile_Cast_Result :: struct {
 	hit:      bool,
 	shape_id: b3.ShapeId,
+	point:    b3.Pos,
 	fraction: f32,
 }

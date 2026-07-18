@@ -104,17 +104,27 @@ draw_pause_menu :: proc() {
 
 	rl.DrawText("DEBUG", menu_x, 290, 20, rl.LIGHTGRAY)
 
+	tps_text: cstring = "Third Person: OFF"
+	if third_person_enabled {
+		tps_text = "Third Person: ON"
+	}
+
+	if menu_button(menu_x, 320, 300, 50, tps_text) {
+		toggle_third_person_camera()
+		return
+	}
+
 	debug_text: cstring = "Debug Camera: OFF"
 	if debug_camera_enabled {
 		debug_text = "Debug Camera: ON"
 	}
 
-	if menu_button(menu_x, 320, 300, 50, debug_text) {
+	if menu_button(menu_x, 390, 300, 50, debug_text) {
 		toggle_debug_camera()
 		return
 	}
 
-	if menu_button(menu_x, 420, 300, 50, "Exit") {
+	if menu_button(menu_x, 490, 300, 50, "Exit") {
 		game_running = false
 		return
 	}
@@ -128,21 +138,46 @@ draw_room :: proc() {
 	}
 }
 
-draw_player_debug :: proc() {
-	if !debug_camera_enabled {
+draw_player :: proc() {
+	if !debug_camera_enabled && !third_person_enabled {
 		return
 	}
 
 	pos := b3.Body_GetPosition(player.body_id)
 
-	rl.DrawCapsuleWires(
-		{pos.x, pos.y - PLAYER_HALF_HEIGHT, pos.z},
-		{pos.x, pos.y + PLAYER_HALF_HEIGHT, pos.z},
-		PLAYER_RADIUS,
-		8,
-		8,
-		rl.RED,
-	)
+	start := rl.Vector3{
+		pos.x,
+		pos.y - PLAYER_HALF_HEIGHT,
+		pos.z,
+	}
+
+	end := rl.Vector3{
+		pos.x,
+		pos.y + PLAYER_HALF_HEIGHT,
+		pos.z,
+	}
+
+	if third_person_enabled {
+		rl.DrawCapsule(
+			start,
+			end,
+			PLAYER_RADIUS,
+			8,
+			8,
+			rl.BLUE,
+		)
+	}
+
+	if debug_camera_enabled {
+		rl.DrawCapsuleWires(
+			start,
+			end,
+			PLAYER_RADIUS,
+			8,
+			8,
+			rl.RED,
+		)
+	}
 }
 
 draw_enemy :: proc() {
@@ -192,23 +227,124 @@ draw_projectiles :: proc() {
 }
 
 draw_crosshair :: proc() {
+	if debug_camera_enabled {
+		return
+	}
+
 	x := rl.GetScreenWidth() / 2
 	y := rl.GetScreenHeight() / 2
 
-	gap    :: CROSSHAIR_GAP
-	length :: CROSSHAIR_LENGTH
+	// Primary crosshair: always the exact center of the active camera.
+	draw_crosshair_segment(
+		{f32(x), f32(y - CROSSHAIR_GAP - CROSSHAIR_LENGTH)},
+		{f32(x), f32(y - CROSSHAIR_GAP)},
+	)
+	draw_crosshair_segment(
+		{f32(x), f32(y + CROSSHAIR_GAP)},
+		{f32(x), f32(y + CROSSHAIR_GAP + CROSSHAIR_LENGTH)},
+	)
+	draw_crosshair_segment(
+		{f32(x - CROSSHAIR_GAP - CROSSHAIR_LENGTH), f32(y)},
+		{f32(x - CROSSHAIR_GAP), f32(y)},
+	)
+	draw_crosshair_segment(
+		{f32(x + CROSSHAIR_GAP), f32(y)},
+		{f32(x + CROSSHAIR_GAP + CROSSHAIR_LENGTH), f32(y)},
+	)
 
-	// top
-	rl.DrawLine(x, y - gap - length, x, y - gap, rl.BLACK)
+	// Secondary circle: where the physical projectile sphere will first stop.
+	direction := get_projectile_direction()
+	origin := get_aim_origin() + direction * PROJECTILE_SPAWN_OFFSET
+	translation := direction * PROJECTILE_MAX_RANGE
+	hit := cast_projectile(origin, translation)
 
-	// bottom
-	rl.DrawLine(x, y + gap, x, y + gap + length, rl.BLACK)
+	if hit.hit {
+		impact_position :=
+			origin +
+			translation * hit.fraction
 
-	// left
-	rl.DrawLine(x - gap - length, y, x - gap, y, rl.BLACK)
+		to_hit := impact_position - camera.position
+		camera_forward := camera.target - camera.position
+		dot :=
+			to_hit.x * camera_forward.x +
+			to_hit.y * camera_forward.y +
+			to_hit.z * camera_forward.z
 
-	// right
-	rl.DrawLine(x + gap, y, x + gap + length, y, rl.BLACK)
+		if dot > 0 {
+			screen_pos := rl.GetWorldToScreen(impact_position, camera)
+
+			hit_hint_color_timer -= TIME_STEP
+			if hit_hint_color_timer <= 0 {
+				hit_hint_color = get_screen_contrast_color(screen_pos)
+				hit_hint_color_timer = HIT_HINT_COLOR_INTERVAL
+			}
+
+			rl.DrawCircleLines(
+				i32(screen_pos.x),
+				i32(screen_pos.y),
+				HIT_HINT_RADIUS,
+				hit_hint_color,
+			)
+		}
+	}
+}
+
+draw_crosshair_segment :: proc(start_pos, end_pos: rl.Vector2) {
+	rl.DrawLineEx(
+		start_pos,
+		end_pos,
+		CROSSHAIR_BORDER_THICKNESS,
+		rl.WHITE,
+	)
+
+	rl.DrawLineEx(
+		start_pos,
+		end_pos,
+		CROSSHAIR_LINE_THICKNESS,
+		rl.BLACK,
+	)
+}
+
+get_screen_contrast_color :: proc(screen_pos: rl.Vector2) -> rl.Color {
+	image := rl.LoadImageFromScreen()
+	defer rl.UnloadImage(image)
+
+	x := clamp(i32(screen_pos.x), 0, image.width - 1)
+	y := clamp(i32(screen_pos.y), 0, image.height - 1)
+	background := rl.GetImageColor(image, x, y)
+
+	// Pick whichever of black or white has stronger luminance contrast.
+	luminance :=
+		(i32(background.r) * 299 +
+		 i32(background.g) * 587 +
+		 i32(background.b) * 114) / 1000
+
+	if luminance >= 128 {
+		return rl.BLACK
+	}
+
+	return rl.WHITE
+}
+
+draw_aim_debug_ray :: proc() {
+	if !third_person_enabled || debug_camera_enabled {
+		return
+	}
+
+	direction := get_projectile_direction()
+	origin := get_aim_origin() + direction * PROJECTILE_SPAWN_OFFSET
+	translation := direction * PROJECTILE_MAX_RANGE
+	hit := cast_projectile(origin, translation)
+
+	end := origin + translation
+
+	if hit.hit {
+		end =
+			origin +
+			translation * hit.fraction
+	}
+
+	rl.DrawLine3D(origin, end, rl.GREEN)
 }
 
 draw_enemy_health_bar :: proc() {
@@ -298,29 +434,49 @@ update_player :: proc() {
 
 update_camera :: proc() {
 	mouse_delta := rl.GetMouseDelta()
+
+	if !debug_camera_enabled &&
+	   camera_mode_changed &&
+	   aim_target_initialized {
+		// Preserve the same world-space target when switching FPS/TPS.
+		// TPS uses its elevated pivot; FPS uses the player's eye position.
+		pivot := get_camera_pivot()
+		direction := normalize_vector3(aim_target - pivot)
+		set_aim_direction(direction)
+		camera_mode_changed = false
+	}
+
 	camera_yaw   += mouse_delta.x * MOUSE_SENSITIVITY
 	camera_pitch -= mouse_delta.y * MOUSE_SENSITIVITY
 	camera_pitch = clamp(camera_pitch, -89, 89)
-	yaw   := math.to_radians(camera_yaw)
-	pitch := math.to_radians(camera_pitch)
-	forward := rl.Vector3{
-		math.cos(pitch) * math.sin(yaw),
-		math.sin(pitch),
-		-math.cos(pitch) * math.cos(yaw),
-	}
+
+	forward := get_aim_direction()
 
 	if debug_camera_enabled {
 		update_debug_camera(forward)
-	} else {
-		player_pos := b3.Body_GetPosition(player.body_id)
-		camera.position = {
-			player_pos.x,
-			player_pos.y + PLAYER_EYE_HEIGHT,
-			player_pos.z,
-		}
+		camera.target = camera.position + forward
+		return
 	}
 
-	camera.target = camera.position + forward
+	if third_person_enabled {
+		pivot := get_camera_pivot()
+
+		// The camera sits directly behind the TPS pivot along the same
+		// direction used by the center-screen aim ray. This keeps the
+		// player low-center while the primary crosshair remains authoritative.
+		camera.position =
+			pivot -
+			forward * TPS_CAMERA_DISTANCE
+	} else {
+		camera.position = get_aim_origin()
+	}
+
+	aim_target = get_camera_aim_target(
+		camera.position,
+		forward,
+	)
+	aim_target_initialized = true
+	camera.target = aim_target
 }
 
 update_debug_camera :: proc(forward: rl.Vector3) {
@@ -378,6 +534,123 @@ update_projectiles :: proc() {
 			projectiles[i].active = false
 		}
 	}
+}
+
+/* Aim */
+get_aim_direction :: proc() -> rl.Vector3 {
+	yaw := math.to_radians(camera_yaw)
+	pitch := math.to_radians(camera_pitch)
+
+	return {
+		math.cos(pitch) * math.sin(yaw),
+		math.sin(pitch),
+		-math.cos(pitch) * math.cos(yaw),
+	}
+}
+
+set_aim_direction :: proc(direction: rl.Vector3) {
+	normalized_direction := normalize_vector3(direction)
+
+	camera_yaw =
+		math.to_degrees(
+			math.atan2(
+				normalized_direction.x,
+				-normalized_direction.z,
+			),
+		)
+
+	camera_pitch =
+		math.to_degrees(
+			math.asin(
+				clamp(normalized_direction.y, -1, 1),
+			),
+		)
+}
+
+normalize_vector3 :: proc(vector: rl.Vector3) -> rl.Vector3 {
+	length := math.sqrt(
+		vector.x * vector.x +
+		vector.y * vector.y +
+		vector.z * vector.z,
+	)
+
+	if length <= 0 {
+		return {}
+	}
+
+	return vector / length
+}
+
+get_aim_origin :: proc() -> rl.Vector3 {
+	player_pos := b3.Body_GetPosition(player.body_id)
+
+	return {
+		player_pos.x,
+		player_pos.y + PLAYER_EYE_HEIGHT,
+		player_pos.z,
+	}
+}
+
+get_camera_pivot :: proc() -> rl.Vector3 {
+	if !third_person_enabled {
+		return get_aim_origin()
+	}
+
+	player_pos := b3.Body_GetPosition(player.body_id)
+
+	return {
+		player_pos.x,
+		player_pos.y + TPS_TARGET_HEIGHT,
+		player_pos.z,
+	}
+}
+
+get_camera_aim_target :: proc(
+	origin: rl.Vector3,
+	direction: rl.Vector3,
+) -> rl.Vector3 {
+	translation := direction * AIM_MAX_RANGE
+
+	hit := cast_aim_ray(
+		origin,
+		translation,
+	)
+
+	if hit.hit {
+		return origin + translation * hit.fraction
+	}
+
+	return origin + translation
+}
+
+get_projectile_direction :: proc() -> rl.Vector3 {
+	if !aim_target_initialized {
+		return get_aim_direction()
+	}
+
+	return normalize_vector3(
+		aim_target -
+		get_aim_origin(),
+	)
+}
+
+cast_aim_ray :: proc(
+	position: rl.Vector3,
+	translation: rl.Vector3,
+) -> Projectile_Cast_Result {
+	result := Projectile_Cast_Result{}
+	filter := b3.DefaultQueryFilter()
+
+	_ = b3.World_CastRay(
+		world_id,
+		{position.x, position.y, position.z},
+		{translation.x, translation.y, translation.z},
+		filter,
+		projectile_cast_callback,
+		&result,
+	)
+
+	return result
 }
 
 /* Check */
@@ -438,6 +711,11 @@ toggle_pause :: proc() {
 	}
 }
 
+toggle_third_person_camera :: proc() {
+	third_person_enabled = !third_person_enabled
+	camera_mode_changed = true
+}
+
 /* UI */
 menu_button :: proc(x, y, width, height: i32, text: cstring) -> bool {
 	rect := rl.Rectangle{
@@ -483,10 +761,11 @@ shoot_projectile :: proc() {
 			continue
 		}
 
-		direction := camera.target - camera.position
+		direction := get_projectile_direction()
+		spawn_pos := get_aim_origin() + direction * PROJECTILE_SPAWN_OFFSET
 
 		projectiles[i] = Projectile{
-			position = camera.position + direction * PROJECTILE_SPAWN_OFFSET,
+			position = spawn_pos,
 			velocity = direction * PROJECTILE_SPEED,
 			active   = true,
 		}
@@ -515,6 +794,7 @@ projectile_cast_callback :: proc "c" (
 
 	result.hit = true
 	result.shape_id = shape_id
+	result.point = point
 	result.fraction = fraction
 
 	// Clip the cast to this hit.
