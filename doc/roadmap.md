@@ -14,7 +14,7 @@
 * [x] Add third person camera
 * - [x] fix going through wall issue
 * - [x] update ground collision
-* [ ] Restructuring: split helper script, create sub folders and/or packages
+* [x] Restructuring: split helper script, create sub folders and/or packages
 
 **Milestone:** Walk around, shoot an enemy, reduce its health, and kill it.
 
