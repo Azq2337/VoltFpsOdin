@@ -12,6 +12,7 @@ main :: proc() {
 init :: proc() {
 	rl.InitWindow(1280, 720, "Volt FPS Odin")
 	rl.SetTargetFPS(FRAMERATE)
+	rl.DisableCursor()
 
 	world_def := b3.DefaultWorldDef()
 	world_def.gravity = {0, -9.8, 0}
@@ -28,12 +29,16 @@ init :: proc() {
 
 loop :: proc() {
 	for !rl.WindowShouldClose() {
+		update_camera()
+
 		b3.World_Step(world_id, TIME_STEP, SUB_STEP_COUNT)
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.RAYWHITE)
 		rl.BeginMode3D(camera)
-		draw_room()
-		rl.EndMode3D()
+		{
+			defer rl.EndMode3D()
+			draw_room()
+		}
 		rl.DrawFPS(10, 10)
 		rl.DrawText("Volt FPS Odin", 10, 35, 20, rl.DARKGRAY)
 		rl.EndDrawing()

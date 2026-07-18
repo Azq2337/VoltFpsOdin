@@ -2,6 +2,7 @@ package main
 
 import rl "vendor:raylib"
 import b3 "vendor:box3d"
+import "core:math"
 
 create_static_box :: proc(
 	world_id: b3.WorldId,
@@ -35,3 +36,26 @@ draw_room :: proc() {
 	rl.DrawGrid(20, 1)
 }
 
+update_camera :: proc() {
+	mouse_delta := rl.GetMouseDelta()
+
+	camera_yaw   += mouse_delta.x * MOUSE_SENSITIVITY
+	camera_pitch -= mouse_delta.y * MOUSE_SENSITIVITY
+
+	camera_pitch = clamp(camera_pitch, -89, 89)
+
+	yaw   := math.to_radians(camera_yaw)
+	pitch := math.to_radians(camera_pitch)
+
+	direction := rl.Vector3{
+		math.cos(pitch) * math.sin(yaw),
+		math.sin(pitch),
+		-math.cos(pitch) * math.cos(yaw),
+	}
+
+	camera.target = {
+		camera.position.x + direction.x,
+		camera.position.y + direction.y,
+		camera.position.z + direction.z,
+	}
+}
