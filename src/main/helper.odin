@@ -66,6 +66,43 @@ create_static_box :: proc(
 	return body_id
 }
 
+draw_pause_menu :: proc() {
+	center_x := rl.GetScreenWidth() / 2
+	menu_x := center_x - 150
+
+	rl.DrawRectangle(
+		0,
+		0,
+		rl.GetScreenWidth(),
+		rl.GetScreenHeight(),
+		rl.Color{0, 0, 0, 160},
+	)
+
+	rl.DrawText("PAUSED", menu_x, 120, 40, rl.WHITE)
+
+	if menu_button(menu_x, 200, 300, 50, "Continue") {
+		toggle_pause()
+		return
+	}
+
+	rl.DrawText("DEBUG", menu_x, 290, 20, rl.LIGHTGRAY)
+
+	debug_text: cstring = "Debug Camera: OFF"
+	if debug_camera_enabled {
+		debug_text = "Debug Camera: ON"
+	}
+
+	if menu_button(menu_x, 320, 300, 50, debug_text) {
+		toggle_debug_camera()
+		return
+	}
+
+	if menu_button(menu_x, 420, 300, 50, "Exit") {
+		game_running = false
+		return
+	}
+}
+
 draw_player_debug :: proc() {
 	if !debug_camera_enabled {
 		return
@@ -180,17 +217,59 @@ is_player_grounded :: proc() -> bool {
 	return contact_count > 0 && velocity.y <= 0.1
 }
 
-/* Feature */
+/* Toggle */
 toggle_debug_camera :: proc() {
-	if rl.IsKeyPressed(.F3) {
-		debug_camera_enabled = !debug_camera_enabled
+	debug_camera_enabled = !debug_camera_enabled
 
-		if debug_camera_enabled {
-			velocity := b3.Body_GetLinearVelocity(player.body_id)
-			velocity.x = 0
-			velocity.z = 0
-			b3.Body_SetLinearVelocity(player.body_id, velocity)
-		}
+	if debug_camera_enabled {
+		velocity := b3.Body_GetLinearVelocity(player.body_id)
+		velocity.x = 0
+		velocity.z = 0
+		b3.Body_SetLinearVelocity(player.body_id, velocity)
 	}
+}
+
+toggle_pause :: proc() {
+	paused = !paused
+
+	if paused {
+		rl.EnableCursor()
+	} else {
+		rl.DisableCursor()
+	}
+}
+
+/* UI */
+menu_button :: proc(x, y, width, height: i32, text: cstring) -> bool {
+	rect := rl.Rectangle{
+		f32(x),
+		f32(y),
+		f32(width),
+		f32(height),
+	}
+
+	hovered := rl.CheckCollisionPointRec(
+		rl.GetMousePosition(),
+		rect,
+	)
+
+	color := rl.LIGHTGRAY
+	if hovered {
+		color = rl.GRAY
+	}
+
+	rl.DrawRectangle(x, y, width, height, color)
+	rl.DrawRectangleLines(x, y, width, height, rl.DARKGRAY)
+
+	text_width := rl.MeasureText(text, 20)
+	rl.DrawText(
+		text,
+		x + (width - text_width) / 2,
+		y + 15,
+		20,
+		rl.BLACK,
+	)
+
+	return hovered && rl.IsMouseButtonPressed(.LEFT)
 }
 

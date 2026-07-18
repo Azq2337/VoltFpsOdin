@@ -23,6 +23,9 @@ PLAYER_DASH_COOLDOWN    :: 0.35
 DEBUG_CAMERA_SPEED :: 8.0
 
 /* global variable - initialized */
+// game state
+paused       := false
+game_running := true
 // camera
 camera := rl.Camera3D {
 	position   = {0, 4, 10},

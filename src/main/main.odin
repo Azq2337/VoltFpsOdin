@@ -13,6 +13,7 @@ init :: proc() {
 	rl.InitWindow(1280, 720, "Volt FPS Odin")
 	rl.SetTargetFPS(FRAMERATE)
 	rl.DisableCursor()
+	rl.SetExitKey(.KEY_NULL)
 
 	world_def := b3.DefaultWorldDef()
 	world_def.gravity = {0, -9.8, 0}
@@ -30,11 +31,14 @@ init :: proc() {
 }
 
 loop :: proc() {
-	for !rl.WindowShouldClose() {
-		toggle_debug_camera()
-		if !debug_camera_enabled do update_player()
-		b3.World_Step(world_id, TIME_STEP, SUB_STEP_COUNT)
-		update_camera()
+	for game_running && !rl.WindowShouldClose() {
+		if rl.IsKeyPressed(.ESCAPE) do toggle_pause()
+		if !paused {
+			if rl.IsKeyPressed(.F3) do toggle_debug_camera()
+			if !debug_camera_enabled do update_player()
+			b3.World_Step(world_id, TIME_STEP, SUB_STEP_COUNT)
+			update_camera()
+		}
 
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.RAYWHITE)
@@ -44,8 +48,12 @@ loop :: proc() {
 			draw_room()
 			draw_player_debug()
 		}
-		rl.DrawFPS(10, 10)
-		rl.DrawText("Volt FPS Odin", 10, 35, 20, rl.DARKGRAY)
+		if paused {
+			draw_pause_menu()
+		} else {
+			rl.DrawFPS(10, 10)
+			rl.DrawText("Volt FPS Odin", 10, 35, 20, rl.DARKGRAY)
+		}
 		rl.EndDrawing()
 	}
 }
