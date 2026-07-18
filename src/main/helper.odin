@@ -460,13 +460,26 @@ update_camera :: proc() {
 
 	if third_person_enabled {
 		pivot := get_camera_pivot()
-
-		// The camera sits directly behind the TPS pivot along the same
-		// direction used by the center-screen aim ray. This keeps the
-		// player low-center while the primary crosshair remains authoritative.
-		camera.position =
+		desired_position :=
 			pivot -
 			forward * TPS_CAMERA_DISTANCE
+		translation :=
+			desired_position -
+			pivot
+
+		hit := cast_camera(
+			pivot,
+			translation,
+		)
+
+		if hit.hit {
+			camera.position =
+				pivot +
+				translation * hit.fraction
+		} else {
+			camera.position =
+				desired_position
+		}
 	} else {
 		camera.position = get_aim_origin()
 	}
@@ -655,10 +668,39 @@ cast_aim_ray :: proc(
 
 /* Check */
 is_player_grounded :: proc() -> bool {
-	contact_count := b3.Body_GetContactCapacity(player.body_id)
 	velocity := b3.Body_GetLinearVelocity(player.body_id)
+	if velocity.y > 0.1 {
+		return false
+	}
 
-	return contact_count > 0 && velocity.y <= 0.1
+	player_pos := b3.Body_GetPosition(player.body_id)
+	origin := rl.Vector3{
+		player_pos.x,
+		player_pos.y - PLAYER_HALF_HEIGHT,
+		player_pos.z,
+	}
+
+	center := b3.Vec3{}
+	proxy := b3.ShapeProxy{
+		points = &center,
+		count  = 1,
+		radius = GROUND_CHECK_RADIUS,
+	}
+
+	result := Projectile_Cast_Result{}
+	filter := b3.DefaultQueryFilter()
+
+	_ = b3.World_CastShape(
+		world_id,
+		{origin.x, origin.y, origin.z},
+		proxy,
+		{0, -GROUND_CHECK_DISTANCE, 0},
+		filter,
+		ground_cast_callback,
+		&result,
+	)
+
+	return result.hit
 }
 
 cast_projectile :: proc(
@@ -688,6 +730,36 @@ cast_projectile :: proc(
 
 	return result
 }
+
+
+cast_camera :: proc(
+	position: rl.Vector3,
+	translation: rl.Vector3,
+) -> Projectile_Cast_Result {
+	center := b3.Vec3{}
+
+	proxy := b3.ShapeProxy{
+		points = &center,
+		count  = 1,
+		radius = TPS_CAMERA_COLLISION_RADIUS,
+	}
+
+	result := Projectile_Cast_Result{}
+	filter := b3.DefaultQueryFilter()
+
+	_ = b3.World_CastShape(
+		world_id,
+		{position.x, position.y, position.z},
+		proxy,
+		{translation.x, translation.y, translation.z},
+		filter,
+		camera_cast_callback,
+		&result,
+	)
+
+	return result
+}
+
 
 /* Toggle */
 toggle_debug_camera :: proc() {
@@ -772,6 +844,64 @@ shoot_projectile :: proc() {
 
 		break
 	}
+}
+
+camera_cast_callback :: proc "c" (
+	shape_id: b3.ShapeId,
+	point: b3.Pos,
+	normal: b3.Vec3,
+	fraction: f32,
+	user_material_id: u64,
+	triangle_index: c.int,
+	child_index: c.int,
+	ctx: rawptr,
+) -> f32 {
+	body_id := b3.Shape_GetBody(shape_id)
+
+	// Camera should react to room geometry, not the player or enemy capsule.
+	if body_id == player.body_id ||
+	   body_id == enemy.body_id {
+		return -1
+	}
+
+	result := cast(^Projectile_Cast_Result)ctx
+	result.hit = true
+	result.shape_id = shape_id
+	result.point = point
+	result.fraction = fraction
+
+	return fraction
+}
+
+ground_cast_callback :: proc "c" (
+	shape_id: b3.ShapeId,
+	point: b3.Pos,
+	normal: b3.Vec3,
+	fraction: f32,
+	user_material_id: u64,
+	triangle_index: c.int,
+	child_index: c.int,
+	ctx: rawptr,
+) -> f32 {
+	body_id := b3.Shape_GetBody(shape_id)
+
+	if body_id == player.body_id {
+		return -1
+	}
+
+	// Ignore walls and steep surfaces. Only upward-facing surfaces count
+	// as ground for jumping.
+	if normal.y < GROUND_NORMAL_MIN_Y {
+		return -1
+	}
+
+	result := cast(^Projectile_Cast_Result)ctx
+	result.hit = true
+	result.shape_id = shape_id
+	result.point = point
+	result.fraction = fraction
+
+	return fraction
 }
 
 projectile_cast_callback :: proc "c" (
