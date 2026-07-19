@@ -11,6 +11,7 @@ main :: proc() {
 
 init :: proc() {
 	rl.InitWindow(1280, 720, "Volt FPS Odin")
+	init_flashfield()
 	rl.SetTargetFPS(FRAMERATE)
 	rl.DisableCursor()
 	rl.SetExitKey(.KEY_NULL)
@@ -29,6 +30,7 @@ init :: proc() {
 			box.half_size,
 		)
 	}
+
 }
 
 loop :: proc() {
@@ -58,8 +60,9 @@ loop :: proc() {
 			draw_enemy()
 			draw_player()
 			draw_projectiles()
-			draw_aim_debug_ray()
+			draw_flashfield()
 			draw_zap_arcs()
+			draw_aim_debug_ray()
 		}
 		if paused {
 			draw_pause_menu()
@@ -77,6 +80,7 @@ loop :: proc() {
 
 shutdown :: proc() {
 	b3.DestroyWorld(world_id)
+	shutdown_flashfield()
 	rl.CloseWindow()
 }
 

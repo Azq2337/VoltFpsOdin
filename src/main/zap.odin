@@ -1,6 +1,9 @@
 package main
 
 import rl "vendor:raylib"
+import b3 "vendor:box3d"
+import rlgl "vendor:raylib/rlgl"
+import "core:c"
 import "core:math"
 
 MAX_ZAP_ARCS          :: 3
@@ -8,15 +11,26 @@ ZAP_POINT_COUNT       :: 12
 ZAP_REFRESH_INTERVAL  :: 0.04
 ZAP_JITTER            :: 0.35
 ZAP_RING_RADIUS       :: 0.8
+FLASHFIELD_INNER_RADIUS_RATIO :: 0.38
+FLASHFIELD_BANDS              :: 16
+FLASHFIELD_RADIUS             :: 2.5
 
 zap_active := false
 zap_refresh_timer: f32
+flashfield_active := false
 
 zap_points: [MAX_ZAP_ARCS][ZAP_POINT_COUNT]rl.Vector3
+flashfield_model:  rl.Model
+flashfield_shader: rl.Shader
+flashfield_camera_pos_loc: c.int
+flashfield_center_loc:     c.int
+flashfield_camera_forward_loc: c.int
 
 update_zap :: proc() {
+	flashfield_active = rl.IsMouseButtonDown(.RIGHT)
+
 	zap_active =
-		rl.IsMouseButtonDown(.RIGHT) &&
+		flashfield_active &&
 		enemy.tag_count > 0
 
 	if !zap_active {
@@ -180,5 +194,110 @@ get_zap_anchor :: proc(arc_index: int) -> rl.Vector3 {
 		up    * math.sin(math.to_radians(angle))
 
 	return center + offset * ZAP_RING_RADIUS
+}
+
+init_flashfield :: proc() {
+	mesh := rl.GenMeshSphere(
+		FLASHFIELD_RADIUS,
+		32,
+		32,
+	)
+
+	flashfield_model =
+		rl.LoadModelFromMesh(mesh)
+
+	flashfield_shader =
+		rl.LoadShader(
+			"asset/shader/flashfield.vs",
+			"asset/shader/flashfield.fs",
+		)
+
+	flashfield_model.materials[0].shader =
+		flashfield_shader
+
+	flashfield_camera_pos_loc =
+		rl.GetShaderLocation(
+			flashfield_shader,
+			"cameraPos",
+		)
+
+	flashfield_center_loc =
+		rl.GetShaderLocation(
+			flashfield_shader,
+			"fieldCenter",
+		)
+
+	flashfield_camera_forward_loc =
+	rl.GetShaderLocation(
+		flashfield_shader,
+		"cameraForward",
+	)
+}
+
+draw_flashfield :: proc() {
+	if !flashfield_active {
+		return
+	}
+
+	player_pos :=
+		b3.Body_GetPosition(player.body_id)
+
+	center := rl.Vector3{
+		player_pos.x,
+		player_pos.y,
+		player_pos.z,
+	}
+
+	camera_pos := camera.position
+
+	rl.SetShaderValue(
+		flashfield_shader,
+		flashfield_camera_pos_loc,
+		&camera_pos,
+		.VEC3,
+	)
+
+	rl.SetShaderValue(
+		flashfield_shader,
+		flashfield_center_loc,
+		&center,
+		.VEC3,
+	)
+
+	camera_forward := normalize_vector3(
+		camera.target - camera.position,
+	)
+
+	rl.SetShaderValue(
+		flashfield_shader,
+		flashfield_camera_forward_loc,
+		&camera_forward,
+		.VEC3,
+	)
+
+	rl.BeginBlendMode(.ADDITIVE)
+
+	// Required because FPS camera is inside the sphere.
+	rlgl.DisableBackfaceCulling()
+
+	// Transparent sphere should not block lightning drawn later.
+	rlgl.DisableDepthMask()
+
+	rl.DrawModel(
+		flashfield_model,
+		center,
+		1.0,
+		rl.WHITE,
+	)
+
+	rlgl.EnableDepthMask()
+	rlgl.EnableBackfaceCulling()
+
+	rl.EndBlendMode()
+}
+
+shutdown_flashfield :: proc() {
+	rl.UnloadShader(flashfield_shader)
+	rl.UnloadModel(flashfield_model)
 }
 
