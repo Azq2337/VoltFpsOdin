@@ -33,9 +33,8 @@
 * - [x] Layer 6 — Proper rendering
 * [x] Make zap damage depend on tag count
 * [x] Add contact sparks
+* [x] Add advanced movement: hover, wall-bounce, dash-jump
 * [ ] Add floating crosshair and target assistance
-* [ ] Add hover while zapping
-* [ ] Add wall bounce movement
 
 **Milestone:** The core shooting and electrical combat loop feels enjoyable.
 
