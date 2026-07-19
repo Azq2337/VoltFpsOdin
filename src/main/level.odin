@@ -4,12 +4,13 @@ import rl "vendor:raylib"
 import b3 "vendor:box3d"
 
 Room_Box :: struct {
-	center:    rl.Vector3,
-	half_size: rl.Vector3,
-	color:     rl.Color,
+	center:             rl.Vector3,
+	half_size:          rl.Vector3,
+	color:              rl.Color,
+	zap_route_obstacle: bool,
 }
 
-ROOM_BOX_COUNT :: 5
+ROOM_BOX_COUNT :: 6
 
 ROOM_BOXES :: [ROOM_BOX_COUNT]Room_Box{
 	{
@@ -36,6 +37,13 @@ ROOM_BOXES :: [ROOM_BOX_COUNT]Room_Box{
 		center    = {0, 2.5, 15.5},
 		half_size = {10, 2.5, 0.5},
 		color     = rl.GRAY,
+	},
+	{
+		// Optional off-axis test wall for checking zap route finding.
+		center             = {3.5, 1.5, -4},
+		half_size          = {0.4, 1.5, 2.0},
+		color              = rl.DARKGRAY,
+		zap_route_obstacle = true,
 	},
 }
 

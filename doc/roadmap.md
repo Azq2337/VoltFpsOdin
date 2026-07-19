@@ -24,15 +24,15 @@
 * [x] Support multiple tag levels
 * [x] Add restart button
 * [x] Add zap input and electrical arcs
-* [ ] Update the arc effect with a layered visual model
-* - [ ] Layer 1 — Flashfield
-* - [ ] Layer 2 — Stable lightning backbone
-* - [ ] Layer 3 — Fine lightning noise
-* - [ ] Layer 4 — Multiple strands per tag
-* - [ ] Layer 5 — Temporal coherence
-* - [ ] Layer 6 — Proper rendering
-* [ ] Make zap damage depend on tag count
-* [ ] Add expanding electrical marks while zapping
+* [x] Update the arc effect with a layered visual model
+* - [x] Layer 1 — Flashfield
+* - [x] Layer 2 — Stable lightning backbone
+* - [x] Layer 3 — Fine lightning noise
+* - [x] Layer 4 — Multiple strands per tag
+* - [x] Layer 5 — Temporal coherence
+* - [x] Layer 6 — Proper rendering
+* [x] Make zap damage depend on tag count
+* [x] Add contact sparks
 * [ ] Add floating crosshair and target assistance
 * [ ] Add hover while zapping
 * [ ] Add wall bounce movement
