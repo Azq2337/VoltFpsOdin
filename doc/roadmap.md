@@ -22,8 +22,15 @@
 
 * [x] Add visual tags to enemies
 * [x] Support multiple tag levels
-* [ ] Add restart button
-* [ ] Add zap input and electrical arcs
+* [x] Add restart button
+* [x] Add zap input and electrical arcs
+* [ ] Update the arc effect with a layered visual model
+* - [ ] Layer 1 — Flashfield
+* - [ ] Layer 2 — Stable lightning backbone
+* - [ ] Layer 3 — Fine lightning noise
+* - [ ] Layer 4 — Multiple strands per tag
+* - [ ] Layer 5 — Temporal coherence
+* - [ ] Layer 6 — Proper rendering
 * [ ] Make zap damage depend on tag count
 * [ ] Add expanding electrical marks while zapping
 * [ ] Add floating crosshair and target assistance

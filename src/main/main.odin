@@ -44,6 +44,7 @@ loop :: proc() {
 			update_camera()
 			if !debug_camera_enabled {
 				shoot_projectile()
+				update_zap()
 			}
 			update_projectiles()
 		}
@@ -58,6 +59,7 @@ loop :: proc() {
 			draw_player()
 			draw_projectiles()
 			draw_aim_debug_ray()
+			draw_zap_arcs()
 		}
 		if paused {
 			draw_pause_menu()
