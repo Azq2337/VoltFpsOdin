@@ -20,8 +20,9 @@
 
 ## Phase 2 — Core Volt Combat
 
-* [ ] Add visual tags to enemies
-* [ ] Support multiple tag levels
+* [x] Add visual tags to enemies
+* [x] Support multiple tag levels
+* [ ] Add restart button
 * [ ] Add zap input and electrical arcs
 * [ ] Make zap damage depend on tag count
 * [ ] Add expanding electrical marks while zapping

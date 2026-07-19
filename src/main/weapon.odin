@@ -7,7 +7,7 @@ import "core:c"
 MAX_PROJECTILES         :: 64
 PROJECTILE_RADIUS       :: 0.08
 PROJECTILE_SPEED        :: 25.0
-PROJECTILE_DAMAGE       :: 25.0
+PROJECTILE_DAMAGE       :: 1.0
 PROJECTILE_MAX_RANGE    :: 50.0
 PROJECTILE_SPAWN_OFFSET :: 0.5
 
@@ -59,6 +59,10 @@ update_projectiles :: proc() {
 				enemy.health = max(
 					enemy.health - PROJECTILE_DAMAGE,
 					0,
+				)
+				enemy.tag_count = min(
+					enemy.tag_count + 1,
+					ENEMY_MAX_TAGS,
 				)
 			}
 

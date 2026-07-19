@@ -12,6 +12,10 @@ HIT_HINT_COLOR_INTERVAL    :: 0.1
 ENEMY_HEALTH_BAR_WIDTH     :: 80
 ENEMY_HEALTH_BAR_HEIGHT    :: 8
 ENEMY_HEALTH_BAR_OFFSET    :: 0.4
+ENEMY_TAG_RADIUS           :: 6.0
+ENEMY_TAG_SPACING          :: 18.0
+ENEMY_TAG_OFFSET           :: 0.65
+TAG_RING_RADIUS            :: 58.0
 
 hit_hint_color := rl.WHITE
 hit_hint_color_timer: f32 = 0
@@ -207,6 +211,70 @@ draw_enemy_health_bar :: proc() {
 	)
 }
 
+draw_enemy_tags :: proc() {
+	if enemy.tag_count <= 0 {
+		return
+	}
+
+	world_pos := get_enemy_lock_position()
+
+	// Don't draw when the lock point is behind the camera.
+	to_enemy := world_pos - camera.position
+	camera_forward := camera.target - camera.position
+
+	dot :=
+		to_enemy.x * camera_forward.x +
+		to_enemy.y * camera_forward.y +
+		to_enemy.z * camera_forward.z
+
+	if dot <= 0 {
+		return
+	}
+
+	center := rl.GetWorldToScreen(world_pos, camera)
+
+	color := rl.Color{40, 150, 255, 255}
+
+	if enemy.tag_count == 2 {
+		color = rl.Color{255, 210, 30, 255}
+	} else if enemy.tag_count >= 3 {
+		color = rl.Color{255, 40, 40, 255}
+	}
+
+	// Soft outer glow.
+	rl.DrawRing(
+		center,
+		TAG_RING_RADIUS - 8,
+		TAG_RING_RADIUS + 12,
+		0,
+		360,
+		64,
+		rl.Fade(color, 0.20),
+	)
+
+	// Dark border prevents red/yellow/blue disappearing into the enemy.
+	rl.DrawRing(
+		center,
+		TAG_RING_RADIUS - 5,
+		TAG_RING_RADIUS + 5,
+		0,
+		360,
+		64,
+		rl.Color{0, 0, 0, 220},
+	)
+
+	// Bright actual tag ring.
+	rl.DrawRing(
+		center,
+		TAG_RING_RADIUS - 3,
+		TAG_RING_RADIUS + 3,
+		0,
+		360,
+		64,
+		color,
+	)
+}
+
 menu_button :: proc(x, y, width, height: i32, text: cstring) -> bool {
 	rect := rl.Rectangle{
 		f32(x),
@@ -239,3 +307,4 @@ menu_button :: proc(x, y, width, height: i32, text: cstring) -> bool {
 
 	return hovered && rl.IsMouseButtonPressed(.LEFT)
 }
+

@@ -64,6 +64,7 @@ loop :: proc() {
 		} else {
 			draw_crosshair()
 			draw_enemy_health_bar()
+			draw_enemy_tags()
 
 			rl.DrawFPS(10, 10)
 			rl.DrawText("Volt FPS Odin", 10, 35, 20, rl.DARKGRAY)
