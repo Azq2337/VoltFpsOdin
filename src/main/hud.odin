@@ -22,7 +22,9 @@ hit_hint_color_timer: f32 = 0
 
 draw_pause_menu :: proc() {
 	center_x := rl.GetScreenWidth() / 2
-	menu_x := center_x - 150
+
+	left_x  := center_x - 320
+	right_x := center_x + 20
 
 	rl.DrawRectangle(
 		0,
@@ -32,21 +34,34 @@ draw_pause_menu :: proc() {
 		rl.Color{0, 0, 0, 160},
 	)
 
-	rl.DrawText("PAUSED", menu_x, 120, 40, rl.WHITE)
+	rl.DrawText("PAUSED", center_x - 75, 120, 40, rl.WHITE)
 
-	if menu_button(menu_x, 200, 300, 50, "Continue") {
+	// Left column: main actions
+	if menu_button(left_x, 220, 300, 50, "Continue") {
 		toggle_pause()
 		return
 	}
 
-	rl.DrawText("DEBUG", menu_x, 290, 20, rl.LIGHTGRAY)
+	if menu_button(left_x, 290, 300, 50, "Restart") {
+		restart_game()
+		toggle_pause()
+		return
+	}
+
+	if menu_button(left_x, 360, 300, 50, "Exit") {
+		game_running = false
+		return
+	}
+
+	// Right column: camera options
+	rl.DrawText("DEBUG", right_x, 180, 20, rl.LIGHTGRAY)
 
 	tps_text: cstring = "Third Person: OFF"
 	if third_person_enabled {
 		tps_text = "Third Person: ON"
 	}
 
-	if menu_button(menu_x, 320, 300, 50, tps_text) {
+	if menu_button(right_x, 220, 300, 50, tps_text) {
 		toggle_third_person_camera()
 		return
 	}
@@ -56,13 +71,8 @@ draw_pause_menu :: proc() {
 		debug_text = "Debug Camera: ON"
 	}
 
-	if menu_button(menu_x, 390, 300, 50, debug_text) {
+	if menu_button(right_x, 290, 300, 50, debug_text) {
 		toggle_debug_camera()
-		return
-	}
-
-	if menu_button(menu_x, 490, 300, 50, "Exit") {
-		game_running = false
 		return
 	}
 }

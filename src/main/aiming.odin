@@ -129,5 +129,5 @@ draw_aim_debug_ray :: proc() {
 			translation * hit.fraction
 	}
 
-	rl.DrawLine3D(origin, end, rl.GREEN)
+	rl.DrawLine3D(origin, end, rl.BLUE)
 }

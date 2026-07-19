@@ -78,3 +78,25 @@ shutdown :: proc() {
 	rl.CloseWindow()
 }
 
+restart_game :: proc() {
+	b3.DestroyWorld(world_id)
+
+	world_def := b3.DefaultWorldDef()
+	world_def.gravity = {0, -9.8, 0}
+	world_id = b3.CreateWorld(world_def)
+
+	player = create_player(world_id)
+	enemy = create_enemy(world_id, {0, 1, -5})
+
+	projectiles = {}
+
+	for box in ROOM_BOXES {
+		_ = create_static_box(
+			world_id,
+			box.center,
+			box.half_size,
+		)
+	}
+
+	aim_target_initialized = false
+}
