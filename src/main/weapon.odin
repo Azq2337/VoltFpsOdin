@@ -6,7 +6,7 @@ import "core:c"
 
 MAX_PROJECTILES         :: 64
 PROJECTILE_RADIUS       :: 0.08
-PROJECTILE_SPEED        :: 25.0
+PROJECTILE_SPEED        :: 120.0
 PROJECTILE_DAMAGE       :: 1.0
 PROJECTILE_MAX_RANGE    :: 50.0
 PROJECTILE_SPAWN_OFFSET :: 0.5
@@ -45,36 +45,57 @@ update_projectiles :: proc() {
 			continue
 		}
 
-		translation := projectiles[i].velocity * TIME_STEP
+		translation :=
+			projectiles[i].velocity *
+			TIME_STEP
 
-		hit := cast_projectile(
-			projectiles[i].position,
-			translation,
-		)
+		hit :=
+			cast_projectile(
+				projectiles[i].position,
+				translation,
+			)
 
 		if hit.hit {
-			hit_body := b3.Shape_GetBody(hit.shape_id)
-
-			if hit_body == enemy.body_id {
-				enemy.health = max(
-					enemy.health - PROJECTILE_DAMAGE,
-					0,
+			hit_body :=
+				b3.Shape_GetBody(
+					hit.shape_id,
 				)
-				enemy.tag_count = min(
-					enemy.tag_count + 1,
-					ENEMY_MAX_TAGS,
+
+			enemy_index :=
+				get_enemy_index_from_body(
+					hit_body,
+				)
+
+			if enemy_index >= 0 {
+				// Projectile damage is intentionally tiny. The shot's
+				// primary purpose is building tags for Flashfield damage.
+				add_enemy_tag(
+					enemy_index,
+				)
+
+				damage_enemy(
+					enemy_index,
+					PROJECTILE_DAMAGE,
 				)
 			}
 
-			projectiles[i].active = false
+			projectiles[i].active =
+				false
+
 			continue
 		}
 
-		projectiles[i].position += translation
-		projectiles[i].distance_traveled += PROJECTILE_SPEED * TIME_STEP
+		projectiles[i].position +=
+			translation
 
-		if projectiles[i].distance_traveled >= PROJECTILE_MAX_RANGE {
-			projectiles[i].active = false
+		projectiles[i].distance_traveled +=
+			PROJECTILE_SPEED *
+			TIME_STEP
+
+		if projectiles[i].distance_traveled >=
+		   PROJECTILE_MAX_RANGE {
+			projectiles[i].active =
+				false
 		}
 	}
 }
@@ -96,9 +117,17 @@ cast_projectile :: proc(
 
 	_ = b3.World_CastShape(
 		world_id,
-		{position.x, position.y, position.z},
+		{
+			position.x,
+			position.y,
+			position.z,
+		},
 		proxy,
-		{translation.x, translation.y, translation.z},
+		{
+			translation.x,
+			translation.y,
+			translation.z,
+		},
 		filter,
 		projectile_cast_callback,
 		&result,
@@ -117,14 +146,20 @@ shoot_projectile :: proc() {
 			continue
 		}
 
-		direction := get_projectile_direction()
-		spawn_pos := get_aim_origin() + direction * PROJECTILE_SPAWN_OFFSET
+		spawn_pos :=
+			get_gun_muzzle_position()
 
-		projectiles[i] = Projectile{
-			position = spawn_pos,
-			velocity = direction * PROJECTILE_SPEED,
-			active   = true,
-		}
+		direction :=
+			get_gun_projectile_direction()
+
+		projectiles[i] =
+			Projectile{
+				position = spawn_pos,
+				velocity =
+					direction *
+					PROJECTILE_SPEED,
+				active = true,
+			}
 
 		break
 	}
@@ -140,10 +175,15 @@ projectile_cast_callback :: proc "c" (
 	child_index: c.int,
 	ctx: rawptr,
 ) -> f32 {
-	result := cast(^Projectile_Cast_Result)ctx
+	result :=
+		cast(^Projectile_Cast_Result)ctx
 
-	// Do not let the projectile hit its own player.
-	body_id := b3.Shape_GetBody(shape_id)
+	body_id :=
+		b3.Shape_GetBody(
+			shape_id,
+		)
+
+	// Do not let a projectile hit its own player.
 	if body_id == player.body_id {
 		return -1
 	}
@@ -153,6 +193,5 @@ projectile_cast_callback :: proc "c" (
 	result.point = point
 	result.fraction = fraction
 
-	// Clip the cast to this hit.
 	return fraction
 }

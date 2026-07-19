@@ -34,7 +34,10 @@
 * [x] Make zap damage depend on tag count
 * [x] Add contact sparks
 * [x] Add advanced movement: hover, wall-bounce, dash-jump
-* [ ] Add floating crosshair and target assistance
+* [x] Add floating crosshair and target assistance
+* - [x] Add enemy dying mechanism (and optional respawn for testing)
+* - [x] update the test level
+* [ ] fix issues and wrap up phase 2 
 
 **Milestone:** The core shooting and electrical combat loop feels enjoyable.
 
