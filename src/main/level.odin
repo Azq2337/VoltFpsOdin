@@ -142,14 +142,9 @@ create_static_box :: proc(
 			half_size.z,
 		)
 
-	shape_def :=
-		b3.DefaultShapeDef()
-
-	_ = b3.CreateHullShape(
-		body_id,
-		shape_def,
-		&hull.base,
-	)
+	shape_def := b3.DefaultShapeDef()
+	shape_def.baseMaterial.friction = 0
+	_ = b3.CreateHullShape(body_id, shape_def, &hull.base)
 
 	return body_id
 }

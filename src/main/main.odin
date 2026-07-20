@@ -176,7 +176,7 @@ restart_game :: proc() {
 	)
 
 	projectiles = {}
-	wall_smoke_particles = {}
+	surface_smoke_particles = {}
 
 	create_game_world()
 
