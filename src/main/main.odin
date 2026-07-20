@@ -3,6 +3,11 @@ package main
 import rl "vendor:raylib"
 import b3 "vendor:box3d"
 
+import world "../world"
+import player "../player"
+import gameplay "../gameplay"
+import npc "../npc"
+
 main :: proc() {
 	init()
 	defer shutdown()
@@ -16,25 +21,25 @@ create_game_world :: proc() {
 	world_def.gravity =
 		{0, -9.8, 0}
 
-	world_id =
+	world.world_id =
 		b3.CreateWorld(
 			world_def,
 		)
 
-	world_initialized = true
+	world.world_initialized = true
 
-	player =
-		create_player(
-			world_id,
+	player.player =
+		player.create_player(
+			world.world_id,
 		)
 
-	init_enemies(
-		world_id,
+	npc.init_enemies(
+		world.world_id,
 	)
 
-	for box in ROOM_BOXES {
-		_ = create_static_box(
-			world_id,
+	for box in world.ROOM_BOXES {
+		_ = world.create_static_box(
+			world.world_id,
 			box.center,
 			box.half_size,
 		)
@@ -42,40 +47,40 @@ create_game_world :: proc() {
 }
 
 destroy_game_world :: proc() {
-	if !world_initialized {
+	if !world.world_initialized {
 		return
 	}
 
 	b3.DestroyWorld(
-		world_id,
+		world.world_id,
 	)
 
-	world_initialized = false
+	world.world_initialized = false
 }
 
 reset_runtime_gameplay_state :: proc() {
-	projectiles = {}
-	surface_smoke_particles = {}
+	gameplay.reset_projectiles()
+	player.reset_player_runtime_state()
 
-	reset_aiming_state()
-	reset_zap_state()
-	reset_camera()
+	gameplay.reset_aiming_state()
+	gameplay.reset_zap_state()
+	player.reset_camera()
 }
 
 start_new_game :: proc() {
 	destroy_game_world()
 	create_game_world()
 	reset_runtime_gameplay_state()
-	enter_playing_state()
+	world.enter_playing_state()
 }
 
 leave_game_to_main_menu :: proc() {
 	destroy_game_world()
 
-	projectiles = {}
-	surface_smoke_particles = {}
+	gameplay.reset_projectiles()
+	player.reset_player_runtime_state()
 
-	show_main_menu()
+	world.show_main_menu()
 }
 
 init :: proc() {
@@ -85,88 +90,294 @@ init :: proc() {
 		"Volt FPS Odin",
 	)
 
-	init_flashfield()
+	gameplay.init_flashfield()
 
 	rl.SetTargetFPS(
-		FRAMERATE,
+		world.FRAMERATE,
 	)
 
 	rl.SetExitKey(.KEY_NULL)
-
-	// Do not capture the mouse at application startup. The main menu owns a
-	// normal cursor, and gameplay captures it only after Start/Continue.
 	rl.EnableCursor()
 
-	show_main_menu()
+	world.show_main_menu()
 }
 
 update_gameplay :: proc() {
-	update_aim_mode_input()
+	gameplay.update_aim_mode_input()
 
 	if rl.IsKeyPressed(.F2) {
-		toggle_third_person_camera()
+		player.toggle_third_person_camera()
 	}
 
 	if rl.IsKeyPressed(.F3) {
-		toggle_debug_camera()
+		player.toggle_debug_camera()
 	}
 
 	if rl.IsKeyPressed(.F4) {
-		toggle_aim_debug_rays()
+		gameplay.toggle_aim_debug_rays()
 	}
 
 	if rl.IsKeyPressed(.F5) {
-		toggle_enemy_auto_respawn()
+		npc.toggle_enemy_auto_respawn()
 	}
 
-	if !debug_camera_enabled {
-		update_player()
+	if !player.debug_camera_enabled {
+		player.update_player()
 	}
 
 	b3.World_Step(
-		world_id,
-		TIME_STEP,
-		SUB_STEP_COUNT,
+		world.world_id,
+		world.TIME_STEP,
+		world.SUB_STEP_COUNT,
 	)
 
-	update_camera()
-	update_aiming()
+	mouse_delta :=
+		world.get_gameplay_mouse_delta()
 
-	if !debug_camera_enabled {
-		shoot_projectile()
-		update_zap()
+	camera_mouse_delta :=
+		gameplay.update_floating_crosshair(
+			mouse_delta,
+		)
+
+	player.update_camera(
+		camera_mouse_delta,
+	)
+
+	gameplay.update_aiming()
+
+	if !player.debug_camera_enabled {
+		gameplay.shoot_projectile()
+		gameplay.update_zap()
 	} else {
-		flashfield_active = false
-		zap_active = false
+		gameplay.flashfield_active = false
+		gameplay.zap_active = false
 	}
 
-	update_projectiles()
-	update_enemies()
+	gameplay.update_projectiles()
+	npc.update_enemies()
+}
+
+is_world_position_in_front :: proc(
+	position: rl.Vector3,
+) -> bool {
+	to_position :=
+		position -
+		player.camera.position
+
+	camera_forward :=
+		player.camera.target -
+		player.camera.position
+
+	dot :=
+		to_position.x *
+			camera_forward.x +
+		to_position.y *
+			camera_forward.y +
+		to_position.z *
+			camera_forward.z
+
+	return dot > 0
+}
+
+draw_gameplay_hud :: proc() {
+	radii :=
+		gameplay.get_floating_crosshair_radii()
+
+	world.draw_free_aim_debug_circle(
+		gameplay.aim_debug_rays_enabled &&
+			gameplay.auto_aim_enabled,
+		radii.x,
+	)
+
+	world.draw_crosshair(
+		gameplay.get_crosshair_screen_position(),
+	)
+
+	// Projectile impact hint.
+	projectile_origin :=
+		gameplay.get_gun_muzzle_position()
+
+	projectile_direction :=
+		gameplay.get_gun_projectile_direction()
+
+	projectile_translation :=
+		projectile_direction *
+			gameplay.PROJECTILE_MAX_RANGE
+
+	projectile_hit :=
+		gameplay.cast_projectile(
+			projectile_origin,
+			projectile_translation,
+		)
+
+	if projectile_hit.hit {
+		impact_position :=
+			projectile_origin +
+			projectile_translation *
+				projectile_hit.fraction
+
+		if is_world_position_in_front(
+			impact_position,
+		) {
+			world.draw_hit_hint(
+				rl.GetWorldToScreen(
+					impact_position,
+					player.camera,
+				),
+			)
+		}
+	}
+
+	for i in 0..<npc.MAX_ENEMIES {
+		if !npc.enemies[i].active ||
+		   !npc.enemies[i].alive {
+			continue
+		}
+
+		lock_position :=
+			npc.get_enemy_lock_position(i)
+
+		if !is_world_position_in_front(
+			lock_position,
+		) {
+			continue
+		}
+
+		health_position :=
+			rl.Vector3{
+				lock_position.x,
+				lock_position.y +
+					npc.ENEMY_HALF_HEIGHT +
+					npc.ENEMY_RADIUS +
+					0.4,
+				lock_position.z,
+			}
+
+		world.draw_enemy_health_bar(
+			rl.GetWorldToScreen(
+				health_position,
+				player.camera,
+			),
+			npc.enemies[i].health /
+				npc.enemies[i].max_health,
+		)
+
+		if npc.enemies[i].tag_count > 0 {
+			world.draw_enemy_tag(
+				rl.GetWorldToScreen(
+					lock_position,
+					player.camera,
+				),
+				npc.enemies[i].tag_count,
+			)
+		}
+	}
+
+	if gameplay.auto_aim_enabled &&
+	   gameplay.is_auto_aim_target_valid(
+			gameplay.current_auto_aim_target,
+		) {
+		target_position :=
+			npc.get_enemy_lock_position(
+				gameplay.current_auto_aim_target,
+			)
+
+		if is_world_position_in_front(
+			target_position,
+		) {
+			world.draw_auto_aim_target(
+				rl.GetWorldToScreen(
+					target_position,
+					player.camera,
+				),
+			)
+		}
+	}
+
+	world.draw_training_status(
+		gameplay.auto_aim_enabled,
+		npc.enemy_auto_respawn_enabled,
+		gameplay.aim_debug_rays_enabled,
+	)
+
+	rl.DrawFPS(
+		10,
+		10,
+	)
+
+	rl.DrawText(
+		"Volt FPS Odin",
+		10,
+		35,
+		20,
+		rl.DARKGRAY,
+	)
+}
+
+handle_menu_action :: proc(
+	action: world.Menu_Action,
+) {
+	switch action {
+	case .NONE:
+		return
+
+	case .START_GAME:
+		start_new_game()
+
+	case .OPTIONS:
+		world.open_options_menu(
+			world.game_screen,
+		)
+
+	case .EXIT:
+		world.game_running = false
+
+	case .CONTINUE:
+		world.resume_game()
+
+	case .RESTART:
+		restart_game()
+
+	case .MAIN_MENU:
+		leave_game_to_main_menu()
+
+	case .BACK:
+		world.close_options_menu()
+
+	case .TOGGLE_AUTO_AIM:
+		gameplay.toggle_auto_aim()
+
+	case .TOGGLE_AIM_RAYS:
+		gameplay.toggle_aim_debug_rays()
+
+	case .TOGGLE_RESPAWN:
+		npc.toggle_enemy_auto_respawn()
+	}
 }
 
 loop :: proc() {
-	for game_running &&
+	for world.game_running &&
 	    !rl.WindowShouldClose() {
-		update_window_and_cursor_state()
+		world.update_window_and_cursor_state()
 
-		switch game_screen {
+		switch world.game_screen {
 		case .PLAYING:
 			if rl.IsKeyPressed(.ESCAPE) {
-				pause_game()
+				world.pause_game()
 			}
 
-			if game_screen == .PLAYING {
+			if world.game_screen == .PLAYING {
 				update_gameplay()
 			}
 
 		case .PAUSED:
 			if rl.IsKeyPressed(.ESCAPE) {
-				resume_game()
+				world.resume_game()
 			}
 
 		case .OPTIONS:
 			if rl.IsKeyPressed(.ESCAPE) {
-				close_options_menu()
+				world.close_options_menu()
 			}
 
 		case .MAIN_MENU:
@@ -178,55 +389,48 @@ loop :: proc() {
 			rl.RAYWHITE,
 		)
 
-		if world_initialized {
+		if world.world_initialized {
 			rl.BeginMode3D(
-				camera,
+				player.camera,
 			)
 
 			{
 				defer rl.EndMode3D()
 
-				draw_room()
-				draw_enemies()
-				draw_player()
-				draw_projectiles()
-				draw_flashfield()
-				draw_gun()
-				draw_zap_arcs()
-				draw_aim_debug_ray()
+				world.draw_room()
+				npc.draw_enemies()
+				player.draw_player()
+				gameplay.draw_projectiles()
+				gameplay.draw_flashfield()
+				gameplay.draw_gun()
+				gameplay.draw_zap_arcs()
+				gameplay.draw_aim_debug_ray()
 			}
 		}
 
-		switch game_screen {
+		switch world.game_screen {
 		case .MAIN_MENU:
-			draw_main_menu()
+			handle_menu_action(
+				world.draw_main_menu(),
+			)
 
 		case .OPTIONS:
-			draw_options_menu()
+			handle_menu_action(
+				world.draw_options_menu(
+					gameplay.auto_aim_enabled,
+					gameplay.aim_debug_rays_enabled,
+					npc.enemy_auto_respawn_enabled,
+					world.world_initialized,
+				),
+			)
 
 		case .PAUSED:
-			draw_pause_screen()
+			handle_menu_action(
+				world.draw_pause_screen(),
+			)
 
 		case .PLAYING:
-			draw_free_aim_debug_ellipse()
-			draw_crosshair()
-			draw_auto_aim_target()
-			draw_enemy_health_bars()
-			draw_enemy_tags()
-			draw_training_status()
-
-			rl.DrawFPS(
-				10,
-				10,
-			)
-
-			rl.DrawText(
-				"Volt FPS Odin",
-				10,
-				35,
-				20,
-				rl.DARKGRAY,
-			)
+			draw_gameplay_hud()
 		}
 
 		rl.EndDrawing()
@@ -236,7 +440,7 @@ loop :: proc() {
 shutdown :: proc() {
 	destroy_game_world()
 
-	shutdown_flashfield()
+	gameplay.shutdown_flashfield()
 	rl.CloseWindow()
 }
 
@@ -245,5 +449,5 @@ restart_game :: proc() {
 
 	create_game_world()
 	reset_runtime_gameplay_state()
-	enter_playing_state()
+	world.enter_playing_state()
 }

@@ -1,10 +1,94 @@
-package main
+package world
 
 import rl "vendor:raylib"
 
 MENU_BUTTON_WIDTH  :: 320
 MENU_BUTTON_HEIGHT :: 50
 MENU_BUTTON_GAP    :: 14
+
+Menu_Action :: enum {
+	NONE,
+	START_GAME,
+	OPTIONS,
+	EXIT,
+	CONTINUE,
+	RESTART,
+	MAIN_MENU,
+	BACK,
+	TOGGLE_AUTO_AIM,
+	TOGGLE_AIM_RAYS,
+	TOGGLE_RESPAWN,
+}
+
+menu_button :: proc(
+	x,
+	y,
+	width,
+	height: i32,
+	text: cstring,
+) -> bool {
+	mouse :=
+		rl.GetMousePosition()
+
+	hovered :=
+		rl.CheckCollisionPointRec(
+			mouse,
+			{
+				f32(x),
+				f32(y),
+				f32(width),
+				f32(height),
+			},
+		)
+
+	color := rl.LIGHTGRAY
+
+	if hovered {
+		color = rl.GRAY
+	}
+
+	rl.DrawRectangle(
+		x,
+		y,
+		width,
+		height,
+		color,
+	)
+
+	rl.DrawRectangleLines(
+		x,
+		y,
+		width,
+		height,
+		rl.DARKGRAY,
+	)
+
+	text_width :=
+		rl.MeasureText(
+			text,
+			20,
+		)
+
+	rl.DrawText(
+		text,
+		x +
+			(
+				width -
+				text_width
+			) /
+				2,
+		y + 15,
+		20,
+		rl.BLACK,
+	)
+
+	return (
+		hovered &&
+		rl.IsMouseButtonPressed(
+			.LEFT,
+		)
+	)
+}
 
 draw_menu_background :: proc(alpha: u8) {
 	rl.DrawRectangle(
@@ -40,7 +124,7 @@ draw_centered_menu_button :: proc(
 	)
 }
 
-draw_main_menu :: proc() {
+draw_main_menu :: proc() -> Menu_Action {
 	center_x :=
 		rl.GetScreenWidth() /
 		2
@@ -67,8 +151,7 @@ draw_main_menu :: proc() {
 		y,
 		"Start Game",
 	) {
-		start_new_game()
-		return
+		return .START_GAME
 	}
 
 	y += MENU_BUTTON_HEIGHT +
@@ -78,10 +161,7 @@ draw_main_menu :: proc() {
 		y,
 		"Options",
 	) {
-		open_options_menu(
-			.MAIN_MENU,
-		)
-		return
+		return .OPTIONS
 	}
 
 	y += MENU_BUTTON_HEIGHT +
@@ -91,12 +171,13 @@ draw_main_menu :: proc() {
 		y,
 		"Exit",
 	) {
-		game_running = false
-		return
+		return .EXIT
 	}
+
+	return .NONE
 }
 
-draw_pause_screen :: proc() {
+draw_pause_screen :: proc() -> Menu_Action {
 	draw_menu_background(
 		165,
 	)
@@ -119,8 +200,7 @@ draw_pause_screen :: proc() {
 		y,
 		"Continue",
 	) {
-		resume_game()
-		return
+		return .CONTINUE
 	}
 
 	y += MENU_BUTTON_HEIGHT +
@@ -130,8 +210,7 @@ draw_pause_screen :: proc() {
 		y,
 		"Restart",
 	) {
-		restart_game()
-		return
+		return .RESTART
 	}
 
 	y += MENU_BUTTON_HEIGHT +
@@ -141,10 +220,7 @@ draw_pause_screen :: proc() {
 		y,
 		"Options",
 	) {
-		open_options_menu(
-			.PAUSED,
-		)
-		return
+		return .OPTIONS
 	}
 
 	y += MENU_BUTTON_HEIGHT +
@@ -154,8 +230,7 @@ draw_pause_screen :: proc() {
 		y,
 		"Main Menu",
 	) {
-		leave_game_to_main_menu()
-		return
+		return .MAIN_MENU
 	}
 
 	y += MENU_BUTTON_HEIGHT +
@@ -165,13 +240,19 @@ draw_pause_screen :: proc() {
 		y,
 		"Exit",
 	) {
-		game_running = false
-		return
+		return .EXIT
 	}
+
+	return .NONE
 }
 
-draw_options_menu :: proc() {
-	if world_initialized {
+draw_options_menu :: proc(
+	auto_aim_enabled,
+	aim_debug_rays_enabled,
+	enemy_auto_respawn_enabled,
+	has_game_world: bool,
+) -> Menu_Action {
+	if has_game_world {
 		draw_menu_background(
 			165,
 		)
@@ -184,7 +265,7 @@ draw_options_menu :: proc() {
 	title_color :=
 		rl.DARKGRAY
 
-	if world_initialized {
+	if has_game_world {
 		title_color =
 			rl.WHITE
 	}
@@ -211,8 +292,7 @@ draw_options_menu :: proc() {
 		y,
 		auto_aim_text,
 	) {
-		toggle_auto_aim()
-		return
+		return .TOGGLE_AUTO_AIM
 	}
 
 	y += MENU_BUTTON_HEIGHT +
@@ -230,8 +310,7 @@ draw_options_menu :: proc() {
 		y,
 		aim_ray_text,
 	) {
-		toggle_aim_debug_rays()
-		return
+		return .TOGGLE_AIM_RAYS
 	}
 
 	y += MENU_BUTTON_HEIGHT +
@@ -249,8 +328,7 @@ draw_options_menu :: proc() {
 		y,
 		respawn_text,
 	) {
-		toggle_enemy_auto_respawn()
-		return
+		return .TOGGLE_RESPAWN
 	}
 
 	y += MENU_BUTTON_HEIGHT +
@@ -260,7 +338,8 @@ draw_options_menu :: proc() {
 		y,
 		"Back",
 	) {
-		close_options_menu()
-		return
+		return .BACK
 	}
+
+	return .NONE
 }

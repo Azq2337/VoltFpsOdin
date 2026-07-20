@@ -1,9 +1,10 @@
-package main
+package gameplay
 
 import rl "vendor:raylib"
 import b3 "vendor:box3d"
 import rlgl "vendor:raylib/rlgl"
 import "core:c"
+import player "../player"
 
 FLASHFIELD_RADIUS :: 2.5
 
@@ -44,7 +45,11 @@ init_flashfield :: proc() {
 }
 
 get_flashfield_center :: proc() -> rl.Vector3 {
-	player_pos := b3.Body_GetPosition(player.body_id)
+	player_pos :=
+		b3.Body_GetPosition(
+			player.player.body_id,
+		)
+
 	return {
 		player_pos.x,
 		player_pos.y,
@@ -58,10 +63,13 @@ draw_flashfield :: proc() {
 	}
 
 	center := get_flashfield_center()
-	camera_pos := camera.position
-	camera_forward := normalize_vector3(
-		camera.target - camera.position,
-	)
+	camera_pos := player.camera.position
+	camera_forward :=
+		normalize_vector3(
+			player.camera.target -
+				player.camera.position,
+		)
+
 	time_value: f32 = zap_visual_time
 	radius_value: f32 = FLASHFIELD_RADIUS
 
@@ -71,24 +79,28 @@ draw_flashfield :: proc() {
 		&camera_pos,
 		.VEC3,
 	)
+
 	rl.SetShaderValue(
 		flashfield_shader,
 		flashfield_center_loc,
 		&center,
 		.VEC3,
 	)
+
 	rl.SetShaderValue(
 		flashfield_shader,
 		flashfield_camera_forward_loc,
 		&camera_forward,
 		.VEC3,
 	)
+
 	rl.SetShaderValue(
 		flashfield_shader,
 		flashfield_time_loc,
 		&time_value,
 		.FLOAT,
 	)
+
 	rl.SetShaderValue(
 		flashfield_shader,
 		flashfield_radius_loc,
@@ -98,10 +110,7 @@ draw_flashfield :: proc() {
 
 	rl.BeginBlendMode(.ADDITIVE)
 
-	// FPS views the shell from inside, so both faces must be drawable.
 	rlgl.DisableBackfaceCulling()
-
-	// The transparent shell must not hide lightning or later transparent VFX.
 	rlgl.DisableDepthMask()
 
 	rl.DrawModel(

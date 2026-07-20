@@ -1,8 +1,177 @@
-package main
+package gameplay
 
 import rl "vendor:raylib"
 import b3 "vendor:box3d"
 import "core:c"
+import world "../world"
+import player "../player"
+import npc "../npc"
+
+GUN_BARREL_LENGTH :: 0.58
+
+get_camera_right_vector :: proc() -> rl.Vector3 {
+	forward :=
+		normalize_vector3(
+			player.camera.target -
+			player.camera.position,
+		)
+
+	right :=
+		rl.Vector3CrossProduct(
+			forward,
+			player.camera.up,
+		)
+
+	if vector3_length_squared(
+		right,
+	) <= 0.0001 {
+		return {
+			1,
+			0,
+			0,
+		}
+	}
+
+	return normalize_vector3(
+		right,
+	)
+}
+
+get_gun_base_position :: proc() -> rl.Vector3 {
+	camera_forward :=
+		normalize_vector3(
+			player.camera.target -
+			player.camera.position,
+		)
+
+	camera_right :=
+		get_camera_right_vector()
+
+	camera_up :=
+		normalize_vector3(
+			player.camera.up,
+		)
+
+	if !player.third_person_enabled &&
+	   !player.debug_camera_enabled {
+		// First-person right-hand position.
+		return (
+			player.camera.position +
+			camera_forward * 0.42 +
+			camera_right * 0.30 -
+			camera_up * 0.20
+		)
+	}
+
+	player_pos :=
+		b3.Body_GetPosition(
+			player.player.body_id,
+		)
+
+	// World-space hand position for TPS/debug observation.
+	return (
+		rl.Vector3{
+			player_pos.x,
+			player_pos.y + 0.45,
+			player_pos.z,
+		} +
+		camera_right * 0.48
+	)
+}
+
+get_gun_aim_direction :: proc() -> rl.Vector3 {
+	base :=
+		get_gun_base_position()
+
+	direction :=
+		normalize_vector3(
+			get_final_aim_target() -
+			base,
+		)
+
+	if vector3_length_squared(
+		direction,
+	) <= 0.0001 {
+		return player.get_aim_direction()
+	}
+
+	return direction
+}
+
+get_gun_muzzle_position :: proc() -> rl.Vector3 {
+	base :=
+		get_gun_base_position()
+
+	return (
+		base +
+		get_gun_aim_direction() *
+			GUN_BARREL_LENGTH
+	)
+}
+
+get_gun_projectile_direction :: proc() -> rl.Vector3 {
+	muzzle :=
+		get_gun_muzzle_position()
+
+	return normalize_vector3(
+		get_final_aim_target() -
+		muzzle,
+	)
+}
+
+draw_gun :: proc() {
+	base :=
+		get_gun_base_position()
+
+	direction :=
+		get_gun_aim_direction()
+
+	muzzle :=
+		base +
+		direction *
+			GUN_BARREL_LENGTH
+
+	// Temporary visible gun: a rotating barrel plus grip.
+	// The barrel physically points at the selected target.
+	rl.DrawCylinderEx(
+		base,
+		muzzle,
+		0.075,
+		0.055,
+		8,
+		rl.DARKGRAY,
+	)
+
+	rl.DrawSphere(
+		muzzle,
+		0.065,
+		rl.GRAY,
+	)
+
+	grip_top :=
+		base +
+		direction *
+			0.12
+
+	grip_bottom :=
+		grip_top +
+		rl.Vector3{
+			0,
+			-0.28,
+			0,
+		} -
+		direction *
+			0.07
+
+	rl.DrawCylinderEx(
+		grip_top,
+		grip_bottom,
+		0.065,
+		0.050,
+		6,
+		rl.GRAY,
+	)
+}
 
 MAX_PROJECTILES         :: 64
 PROJECTILE_RADIUS       :: 0.08
@@ -47,7 +216,7 @@ update_projectiles :: proc() {
 
 		translation :=
 			projectiles[i].velocity *
-			TIME_STEP
+			world.TIME_STEP
 
 		hit :=
 			cast_projectile(
@@ -62,18 +231,18 @@ update_projectiles :: proc() {
 				)
 
 			enemy_index :=
-				get_enemy_index_from_body(
+				npc.get_enemy_index_from_body(
 					hit_body,
 				)
 
 			if enemy_index >= 0 {
 				// Projectile damage is intentionally tiny. The shot's
 				// primary purpose is building tags for Flashfield damage.
-				add_enemy_tag(
+				npc.add_enemy_tag(
 					enemy_index,
 				)
 
-				damage_enemy(
+				npc.damage_enemy(
 					enemy_index,
 					PROJECTILE_DAMAGE,
 				)
@@ -90,7 +259,7 @@ update_projectiles :: proc() {
 
 		projectiles[i].distance_traveled +=
 			PROJECTILE_SPEED *
-			TIME_STEP
+			world.TIME_STEP
 
 		if projectiles[i].distance_traveled >=
 		   PROJECTILE_MAX_RANGE {
@@ -116,7 +285,7 @@ cast_projectile :: proc(
 	filter := b3.DefaultQueryFilter()
 
 	_ = b3.World_CastShape(
-		world_id,
+		world.world_id,
 		{
 			position.x,
 			position.y,
@@ -184,7 +353,7 @@ projectile_cast_callback :: proc "c" (
 		)
 
 	// Do not let a projectile hit its own player.
-	if body_id == player.body_id {
+	if body_id == player.player.body_id {
 		return -1
 	}
 
@@ -194,4 +363,8 @@ projectile_cast_callback :: proc "c" (
 	result.fraction = fraction
 
 	return fraction
+}
+
+reset_projectiles :: proc() {
+	projectiles = {}
 }

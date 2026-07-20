@@ -1,10 +1,13 @@
-package main
+package gameplay
 
 import rl "vendor:raylib"
 import b3 "vendor:box3d"
 import rlgl "vendor:raylib/rlgl"
 import "core:math"
 import "core:c"
+import world "../world"
+import player "../player"
+import npc "../npc"
 
 AIM_MAX_RANGE :: 1000.0
 
@@ -51,36 +54,6 @@ update_aim_mode_input :: proc() {
 	}
 }
 
-get_aim_direction :: proc() -> rl.Vector3 {
-	yaw := math.to_radians(camera_yaw)
-	pitch := math.to_radians(camera_pitch)
-
-	return {
-		math.cos(pitch) * math.sin(yaw),
-		math.sin(pitch),
-		-math.cos(pitch) * math.cos(yaw),
-	}
-}
-
-set_aim_direction :: proc(direction: rl.Vector3) {
-	normalized_direction := normalize_vector3(direction)
-
-	camera_yaw =
-		math.to_degrees(
-			math.atan2(
-				normalized_direction.x,
-				-normalized_direction.z,
-			),
-		)
-
-	camera_pitch =
-		math.to_degrees(
-			math.asin(
-				clamp(normalized_direction.y, -1, 1),
-			),
-		)
-}
-
 normalize_vector3 :: proc(vector: rl.Vector3) -> rl.Vector3 {
 	length :=
 		math.sqrt(
@@ -94,19 +67,6 @@ normalize_vector3 :: proc(vector: rl.Vector3) -> rl.Vector3 {
 	}
 
 	return vector / length
-}
-
-get_aim_origin :: proc() -> rl.Vector3 {
-	player_pos :=
-		b3.Body_GetPosition(
-			player.body_id,
-		)
-
-	return {
-		player_pos.x,
-		player_pos.y + PLAYER_EYE_HEIGHT,
-		player_pos.z,
-	}
 }
 
 get_floating_crosshair_radii :: proc() -> rl.Vector2 {
@@ -164,7 +124,7 @@ get_camera_follow_strength :: proc(
 
 // The floating reticle is constrained to an ellipse. Mouse motion inside most
 // of the ellipse moves only the reticle. Continuing to push outward near the
-// boundary progressively rotates the camera.
+// boundary progressively rotates the player.camera.
 update_floating_crosshair :: proc(
 	mouse_delta: rl.Vector2,
 ) -> rl.Vector2 {
@@ -203,7 +163,7 @@ update_floating_crosshair :: proc(
 
 	// Elliptical radial dot product. Positive means the mouse is pushing
 	// farther outward. Moving inward recenters the reticle without dragging
-	// the camera back with it.
+	// the player.camera back with it.
 	outward_motion :=
 		mouse_delta.x *
 			floating_crosshair_offset.x /
@@ -234,7 +194,7 @@ get_raw_aim_ray :: proc() -> (
 	ray :=
 		rl.GetScreenToWorldRay(
 			screen_position,
-			camera,
+			player.camera,
 		)
 
 	origin = ray.position
@@ -276,7 +236,7 @@ get_final_aim_target :: proc() -> rl.Vector3 {
 	   is_auto_aim_target_valid(
 			current_auto_aim_target,
 		) {
-		return get_enemy_lock_position(
+		return npc.get_enemy_lock_position(
 			current_auto_aim_target,
 		)
 	}
@@ -286,8 +246,8 @@ get_final_aim_target :: proc() -> rl.Vector3 {
 	}
 
 	return (
-		get_aim_origin() +
-		get_aim_direction() *
+		player.get_aim_origin() +
+		player.get_aim_direction() *
 			AIM_MAX_RANGE
 	)
 }
@@ -307,13 +267,13 @@ is_auto_aim_target_valid :: proc(
 ) -> bool {
 	return (
 		index >= 0 &&
-		index < MAX_ENEMIES &&
-		enemies[index].active &&
-		enemies[index].alive
+		index < npc.MAX_ENEMIES &&
+		npc.enemies[index].active &&
+		npc.enemies[index].alive
 	)
 }
 
-// Auto aim is intentionally simple: among eligible on-screen enemies, select
+// Auto aim is intentionally simple: among eligible on-screen npc.enemies, select
 // only the one whose lock point is closest to the floating crosshair in 2D.
 // World-space distance does not affect selection.
 update_auto_aim_target :: proc() {
@@ -334,22 +294,22 @@ update_auto_aim_target :: proc() {
 	screen_height :=
 		f32(rl.GetScreenHeight())
 
-	for i in 0..<MAX_ENEMIES {
-		if !enemies[i].active ||
-		   !enemies[i].alive {
+	for i in 0..<npc.MAX_ENEMIES {
+		if !npc.enemies[i].active ||
+		   !npc.enemies[i].alive {
 			continue
 		}
 
 		lock_position :=
-			get_enemy_lock_position(i)
+			npc.get_enemy_lock_position(i)
 
 		to_enemy :=
 			lock_position -
-			camera.position
+			player.camera.position
 
 		camera_forward :=
-			camera.target -
-			camera.position
+			player.camera.target -
+			player.camera.position
 
 		dot :=
 			to_enemy.x * camera_forward.x +
@@ -367,7 +327,7 @@ update_auto_aim_target :: proc() {
 		screen_position :=
 			rl.GetWorldToScreen(
 				lock_position,
-				camera,
+				player.camera,
 			)
 
 		if screen_position.x < 0 ||
@@ -414,13 +374,13 @@ is_enemy_visible_for_auto_aim :: proc(
 	}
 
 	target :=
-		get_enemy_lock_position(
+		npc.get_enemy_lock_position(
 			index,
 		)
 
 	translation :=
 		target -
-		camera.position
+		player.camera.position
 
 	if vector3_length_squared(
 		translation,
@@ -435,11 +395,11 @@ is_enemy_visible_for_auto_aim :: proc(
 		b3.DefaultQueryFilter()
 
 	_ = b3.World_CastRay(
-		world_id,
+		world.world_id,
 		{
-			camera.position.x,
-			camera.position.y,
-			camera.position.z,
+			player.camera.position.x,
+			player.camera.position.y,
+			player.camera.position.z,
 		},
 		{
 			translation.x,
@@ -469,14 +429,15 @@ auto_aim_visibility_callback :: proc "c" (
 			shape_id,
 		)
 
-	if body_id == player.body_id ||
-	   get_enemy_index_from_body(
+	if body_id == player.player.body_id ||
+	   npc.get_enemy_index_from_body(
 			body_id,
 		) >= 0 {
 		return -1
 	}
 
-	result := cast(^Aim_Visibility_Result)ctx
+	result :=
+		cast(^Aim_Visibility_Result)ctx
 
 	result.hit = true
 
@@ -486,7 +447,7 @@ auto_aim_visibility_callback :: proc "c" (
 get_projectile_direction :: proc() -> rl.Vector3 {
 	return normalize_vector3(
 		get_final_aim_target() -
-		get_aim_origin(),
+		player.get_aim_origin(),
 	)
 }
 
@@ -501,7 +462,7 @@ cast_aim_ray :: proc(
 		b3.DefaultQueryFilter()
 
 	_ = b3.World_CastRay(
-		world_id,
+		world.world_id,
 		{
 			position.x,
 			position.y,

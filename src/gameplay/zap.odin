@@ -1,12 +1,15 @@
-package main
+package gameplay
 
 import rl "vendor:raylib"
 import b3 "vendor:box3d"
 import rlgl "vendor:raylib/rlgl"
 import "core:c"
 import "core:math"
+import world "../world"
+import player "../player"
+import npc "../npc"
 
-MAX_ZAP_ARCS                  :: GLOBAL_MAX_TAGS
+MAX_ZAP_ARCS                  :: npc.GLOBAL_MAX_TAGS
 ZAP_BACKBONE_POINT_COUNT      :: 32
 ZAP_RENDER_POINT_COUNT        :: 30
 ZAP_BACKBONE_REFRESH_INTERVAL :: 0.24
@@ -19,11 +22,12 @@ ZAP_DAMAGE_PER_TAG_PER_SECOND :: 15.0
 ZAP_TAU                       :: 6.28318530718
 ZAP_OBSTACLE_CLEARANCE        :: 0.10
 ZAP_ROUTE_CLEARANCE           :: 0.30
-MAX_ZAP_ROUTE_NODES           :: 2 + ROOM_BOX_COUNT * 12
+MAX_ZAP_ROUTE_NODES           :: 2 + world.ROOM_BOX_COUNT * 12
 
 flashfield_active := false
 zap_active        := false
 zap_visual_time: f32
+last_tag_revision: u64
 
 zap_backbone_refresh_timer: [MAX_ZAP_ARCS]f32
 zap_paths_initialized: [MAX_ZAP_ARCS]bool
@@ -63,11 +67,17 @@ reset_zap_state :: proc() {
 	zap_active = false
 	zap_visual_time = 0
 
-	reset_tags()
+	npc.reset_tags()
+	last_tag_revision = npc.tag_revision
 	invalidate_zap_paths()
 }
 
 update_zap :: proc() {
+	if last_tag_revision != npc.tag_revision {
+		last_tag_revision = npc.tag_revision
+		invalidate_zap_paths()
+	}
+
 	flashfield_active =
 		rl.IsMouseButtonDown(
 			.RIGHT,
@@ -75,26 +85,26 @@ update_zap :: proc() {
 
 	if flashfield_active {
 		zap_visual_time +=
-			TIME_STEP
+			world.TIME_STEP
 	}
 
 	zap_active =
 		flashfield_active &&
-		tag_slot_count > 0
+		npc.tag_slot_count > 0
 
 	if !zap_active {
 		return
 	}
 
 	// Exactly one lightning arc belongs to each global tag slot.
-	for slot in 0..<tag_slot_count {
+	for slot in 0..<npc.tag_slot_count {
 		enemy_index :=
-			tag_slots[slot]
+			npc.tag_slots[slot]
 
 		if enemy_index < 0 ||
-		   enemy_index >= MAX_ENEMIES ||
-		   !enemies[enemy_index].active ||
-		   !enemies[enemy_index].alive {
+		   enemy_index >= npc.MAX_ENEMIES ||
+		   !npc.enemies[enemy_index].active ||
+		   !npc.enemies[enemy_index].alive {
 			continue
 		}
 
@@ -105,7 +115,7 @@ update_zap :: proc() {
 		}
 
 		zap_backbone_refresh_timer[slot] -=
-			TIME_STEP
+			world.TIME_STEP
 
 		if zap_backbone_refresh_timer[slot] <= 0 {
 			generate_zap_backbone_target(
@@ -121,7 +131,7 @@ update_zap :: proc() {
 		)
 
 		zap_render_refresh_timer[slot] -=
-			TIME_STEP
+			world.TIME_STEP
 
 		if !zap_render_initialized[slot] ||
 		   zap_render_refresh_timer[slot] <= 0 {
@@ -140,21 +150,21 @@ update_zap :: proc() {
 	// Damage is calculated from each enemy's derived global tag count.
 	// This is done after path updates so an enemy dying cannot shift the tag
 	// slots while the slot loop above is still using them.
-	for enemy_index in 0..<MAX_ENEMIES {
-		if !enemies[enemy_index].active ||
-		   !enemies[enemy_index].alive ||
-		   enemies[enemy_index].tag_count <= 0 {
+	for enemy_index in 0..<npc.MAX_ENEMIES {
+		if !npc.enemies[enemy_index].active ||
+		   !npc.enemies[enemy_index].alive ||
+		   npc.enemies[enemy_index].tag_count <= 0 {
 			continue
 		}
 
 		damage :=
 			ZAP_DAMAGE_PER_TAG_PER_SECOND *
 			f32(
-				enemies[enemy_index].tag_count,
+				npc.enemies[enemy_index].tag_count,
 			) *
-			TIME_STEP
+			world.TIME_STEP
 
-		damage_enemy(
+		npc.damage_enemy(
 			enemy_index,
 			damage,
 		)
@@ -194,7 +204,7 @@ generate_zap_backbone_target :: proc(
 	slot: int,
 ) {
 	enemy_index :=
-		tag_slots[slot]
+		npc.tag_slots[slot]
 
 	start :=
 		get_zap_anchor(
@@ -325,7 +335,7 @@ find_zap_route :: proc(
 		(start.y + target.y) *
 		0.5
 
-	for box in ROOM_BOXES {
+	for box in world.ROOM_BOXES {
 		if !box.zap_route_obstacle {
 			continue
 		}
@@ -619,7 +629,7 @@ cast_zap_environment :: proc(
 		b3.DefaultQueryFilter()
 
 	_ = b3.World_CastRay(
-		world_id,
+		world.world_id,
 		{
 			position.x,
 			position.y,
@@ -654,8 +664,8 @@ zap_cast_callback :: proc "c" (
 		)
 
 	if body_id ==
-	   player.body_id ||
-	   get_enemy_index_from_body(
+	   player.player.body_id ||
+	   npc.get_enemy_index_from_body(
 			body_id,
 		) >= 0 {
 		return -1
@@ -688,18 +698,18 @@ update_zap_backbone :: proc(
 	slot: int,
 ) {
 	enemy_index :=
-		tag_slots[slot]
+		npc.tag_slots[slot]
 
 	if enemy_index < 0 ||
-	   enemy_index >= MAX_ENEMIES ||
-	   !enemies[enemy_index].active ||
-	   !enemies[enemy_index].alive {
+	   enemy_index >= npc.MAX_ENEMIES ||
+	   !npc.enemies[enemy_index].active ||
+	   !npc.enemies[enemy_index].alive {
 		return
 	}
 
 	blend: f32 =
 		min(
-			TIME_STEP *
+			world.TIME_STEP *
 				ZAP_BACKBONE_MORPH_SPEED,
 			1.0,
 		)
@@ -772,14 +782,14 @@ update_zap_backbone :: proc(
 draw_zap_arc_segments :: proc(
 	glow_pass: bool,
 ) {
-	for slot in 0..<tag_slot_count {
+	for slot in 0..<npc.tag_slot_count {
 		enemy_index :=
-			tag_slots[slot]
+			npc.tag_slots[slot]
 
 		if enemy_index < 0 ||
-		   enemy_index >= MAX_ENEMIES ||
-		   !enemies[enemy_index].active ||
-		   !enemies[enemy_index].alive ||
+		   enemy_index >= npc.MAX_ENEMIES ||
+		   !npc.enemies[enemy_index].active ||
+		   !npc.enemies[enemy_index].alive ||
 		   !zap_paths_initialized[slot] {
 			continue
 		}
@@ -831,10 +841,10 @@ draw_zap_arcs :: proc() {
 	// One contact burst per tagged enemy rather than one burst per tag slot.
 	rlgl.DisableDepthTest()
 
-	for enemy_index in 0..<MAX_ENEMIES {
-		if enemies[enemy_index].active &&
-		   enemies[enemy_index].alive &&
-		   enemies[enemy_index].tag_count > 0 {
+	for enemy_index in 0..<npc.MAX_ENEMIES {
+		if npc.enemies[enemy_index].active &&
+		   npc.enemies[enemy_index].alive &&
+		   npc.enemies[enemy_index].tag_count > 0 {
 			draw_zap_contact_effect(
 				enemy_index,
 			)
@@ -914,17 +924,17 @@ generate_zap_render_points :: proc(
 	slot: int,
 ) {
 	if slot < 0 ||
-	   slot >= tag_slot_count {
+	   slot >= npc.tag_slot_count {
 		return
 	}
 
 	enemy_index :=
-		tag_slots[slot]
+		npc.tag_slots[slot]
 
 	if enemy_index < 0 ||
-	   enemy_index >= MAX_ENEMIES ||
-	   !enemies[enemy_index].active ||
-	   !enemies[enemy_index].alive {
+	   enemy_index >= npc.MAX_ENEMIES ||
+	   !npc.enemies[enemy_index].active ||
+	   !npc.enemies[enemy_index].alive {
 		return
 	}
 
@@ -1144,7 +1154,7 @@ get_zap_contact :: proc(
 	normal: rl.Vector3,
 ) {
 	lock_center :=
-		get_enemy_lock_position(
+		npc.get_enemy_lock_position(
 			enemy_index,
 		)
 
@@ -1171,7 +1181,7 @@ get_zap_contact :: proc(
 		lock_center +
 		normal *
 			(
-				ENEMY_RADIUS +
+				npc.ENEMY_RADIUS +
 					0.03
 			)
 
@@ -1182,7 +1192,7 @@ draw_zap_contact_effect :: proc(
 	enemy_index: int,
 ) {
 	if !zap_active ||
-	   !enemies[enemy_index].alive {
+	   !npc.enemies[enemy_index].alive {
 		return
 	}
 
@@ -1239,7 +1249,7 @@ draw_zap_contact_effect :: proc(
 
 	spark_count :=
 		12 +
-		enemies[enemy_index].tag_count *
+		npc.enemies[enemy_index].tag_count *
 			6
 
 	for i in 0..<spark_count {

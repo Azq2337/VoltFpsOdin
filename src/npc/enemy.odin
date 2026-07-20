@@ -1,7 +1,8 @@
-package main
+package npc
 
 import rl "vendor:raylib"
 import b3 "vendor:box3d"
+import world "../world"
 
 ENEMY_RADIUS             :: 0.4
 ENEMY_HALF_HEIGHT        :: 0.6
@@ -42,11 +43,12 @@ enemies: [MAX_ENEMIES]Enemy
 // A fourth tag removes the oldest tag, regardless of which enemy owns it.
 tag_slots: [GLOBAL_MAX_TAGS]int = {-1, -1, -1}
 tag_slot_count: int
+tag_revision: u64
 
 enemy_auto_respawn_enabled := false
 
 create_enemy_body :: proc(
-	world_id: b3.WorldId,
+	physics_world_id: b3.WorldId,
 	position: rl.Vector3,
 ) -> b3.BodyId {
 	body_def := b3.DefaultBodyDef()
@@ -57,7 +59,7 @@ create_enemy_body :: proc(
 		position.z,
 	}
 
-	body_id := b3.CreateBody(world_id, body_def)
+	body_id := b3.CreateBody(physics_world_id, body_def)
 
 	capsule := b3.Capsule{
 		center1 = {0, -ENEMY_HALF_HEIGHT, 0},
@@ -72,13 +74,13 @@ create_enemy_body :: proc(
 }
 
 create_enemy :: proc(
-	world_id: b3.WorldId,
+	physics_world_id: b3.WorldId,
 	position: rl.Vector3,
 ) -> Enemy {
 	return Enemy{
 		body_id =
 			create_enemy_body(
-				world_id,
+				physics_world_id,
 				position,
 			),
 		health         = ENEMY_MAX_HEALTH,
@@ -91,12 +93,12 @@ create_enemy :: proc(
 }
 
 init_enemies :: proc(
-	world_id: b3.WorldId,
+	physics_world_id: b3.WorldId,
 ) {
 	for i in 0..<MAX_ENEMIES {
 		enemies[i] =
 			create_enemy(
-				world_id,
+				physics_world_id,
 				ENEMY_SPAWN_POSITIONS[i],
 			)
 	}
@@ -105,6 +107,7 @@ init_enemies :: proc(
 reset_tags :: proc() {
 	tag_slots = {-1, -1, -1}
 	tag_slot_count = 0
+	tag_revision += 1
 
 	for i in 0..<MAX_ENEMIES {
 		enemies[i].tag_count = 0
@@ -153,7 +156,7 @@ add_enemy_tag :: proc(
 	}
 
 	rebuild_enemy_tag_counts()
-	invalidate_zap_paths()
+	tag_revision += 1
 }
 
 remove_enemy_tags :: proc(
@@ -179,7 +182,7 @@ remove_enemy_tags :: proc(
 	tag_slot_count = write_index
 
 	rebuild_enemy_tag_counts()
-	invalidate_zap_paths()
+	tag_revision += 1
 }
 
 toggle_enemy_auto_respawn :: proc() {
@@ -196,7 +199,7 @@ update_enemies :: proc() {
 		}
 
 		enemies[i].respawn_timer -=
-			TIME_STEP
+			world.TIME_STEP
 
 		if enemies[i].respawn_timer <= 0 {
 			respawn_enemy(i)
@@ -213,7 +216,7 @@ respawn_enemy :: proc(index: int) {
 
 	enemies[index].body_id =
 		create_enemy_body(
-			world_id,
+			world.world_id,
 			enemies[index].spawn_position,
 		)
 
@@ -245,9 +248,6 @@ kill_enemy :: proc(index: int) {
 	enemies[index].respawn_timer =
 		ENEMY_RESPAWN_DELAY
 
-	if current_auto_aim_target == index {
-		current_auto_aim_target = -1
-	}
 }
 
 damage_enemy :: proc(

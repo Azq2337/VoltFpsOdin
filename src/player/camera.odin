@@ -1,7 +1,9 @@
-package main
+package player
 
 import rl "vendor:raylib"
 import b3 "vendor:box3d"
+import world "../world"
+import npc "../npc"
 import "core:math"
 import "core:c"
 
@@ -10,6 +12,13 @@ TPS_CAMERA_DISTANCE         :: 4.0
 TPS_TARGET_HEIGHT           :: 1.8
 TPS_CAMERA_COLLISION_RADIUS :: 0.25
 MOUSE_SENSITIVITY           :: 0.1
+
+Camera_Cast_Result :: struct {
+	hit:      bool,
+	shape_id: b3.ShapeId,
+	point:    b3.Pos,
+	fraction: f32,
+}
 
 camera := rl.Camera3D {
 	position   = {0, 4, 10},
@@ -24,6 +33,17 @@ camera_pitch: f32 = 0
 
 debug_camera_enabled := false
 third_person_enabled := false
+
+get_aim_direction :: proc() -> rl.Vector3 {
+	yaw := math.to_radians(camera_yaw)
+	pitch := math.to_radians(camera_pitch)
+
+	return {
+		math.cos(pitch) * math.sin(yaw),
+		math.sin(pitch),
+		-math.cos(pitch) * math.cos(yaw),
+	}
+}
 
 reset_camera :: proc() {
 	camera_yaw = 0
@@ -45,25 +65,11 @@ reset_camera :: proc() {
 	camera.fovy = 70
 	camera.projection = .PERSPECTIVE
 
-	// Discard any delta produced by cursor capture/window focus transitions.
-	mouse_delta_ignore_frames = 4
 }
 
-update_camera :: proc() {
-	mouse_delta := rl.GetMouseDelta()
-
-	if mouse_delta_ignore_frames > 0 {
-		mouse_delta_ignore_frames -= 1
-		mouse_delta = {}
-	}
-
-	// Traditional mode sends all mouse movement to the camera.
-	// Auto mode lets the floating reticle consume central movement first.
-	camera_mouse_delta :=
-		update_floating_crosshair(
-			mouse_delta,
-		)
-
+update_camera :: proc(
+	camera_mouse_delta: rl.Vector2,
+) {
 	camera_yaw +=
 		camera_mouse_delta.x *
 		MOUSE_SENSITIVITY
@@ -164,7 +170,7 @@ update_debug_camera :: proc(forward: rl.Vector3) {
 	camera.position +=
 		move *
 		DEBUG_CAMERA_SPEED *
-		TIME_STEP
+		world.TIME_STEP
 }
 
 get_camera_pivot :: proc() -> rl.Vector3 {
@@ -188,7 +194,7 @@ get_camera_pivot :: proc() -> rl.Vector3 {
 cast_camera :: proc(
 	position: rl.Vector3,
 	translation: rl.Vector3,
-) -> Projectile_Cast_Result {
+) -> Camera_Cast_Result {
 	center := b3.Vec3{}
 
 	proxy := b3.ShapeProxy{
@@ -198,11 +204,11 @@ cast_camera :: proc(
 			TPS_CAMERA_COLLISION_RADIUS,
 	}
 
-	result := Projectile_Cast_Result{}
+	result := Camera_Cast_Result{}
 	filter := b3.DefaultQueryFilter()
 
 	_ = b3.World_CastShape(
-		world_id,
+		world.world_id,
 		{
 			position.x,
 			position.y,
@@ -263,12 +269,12 @@ camera_cast_callback :: proc "c" (
 		)
 
 	if body_id == player.body_id ||
-	   get_enemy_index_from_body(body_id) >= 0 {
+	   npc.get_enemy_index_from_body(body_id) >= 0 {
 		return -1
 	}
 
 	result :=
-		cast(^Projectile_Cast_Result)ctx
+		cast(^Camera_Cast_Result)ctx
 
 	result.hit = true
 	result.shape_id = shape_id

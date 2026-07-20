@@ -37,12 +37,13 @@
 * [x] Add floating crosshair and target assistance
 * - [x] Add enemy dying mechanism (and optional respawn for testing)
 * - [x] update the test level
-* [ ] fix issues and wrap up phase 2
+* [x] Fix issues and wrap up phase 2
 * - [x] linux stuck on wall
-* - [ ] lightning visual got worse
-* - [ ] new game camera look direction weird and random
-* - [ ] linux start click mouse would put the game window to background
-* - [ ] need a main menu with options, add main menu button to pause as well
+* - [x] lightning visual got worse - fix defered, current lightning is servicable
+* - [x] new game camera look direction weird and random
+* - [x] linux start click mouse would put the game window to background
+* - [x] need a main menu with options, add main menu button to pause as well
+* [x] Restructuring: split packages
 
 **Milestone:** The core shooting and electrical combat loop feels enjoyable.
 
@@ -70,13 +71,15 @@
 
 ## Phase 5 — Game Systems
 
+* [ ] Add energy gauge and replenish action
+* [ ] Add close-range zap and area zap
+* [ ] Add skills and skill gauge
 * [ ] Add score and combo systems
 * [ ] Add dynamic music
 * [ ] Add sound effects
 * [ ] Add enemy detection, movement, and shooting
 * [ ] Add shield enemy behavior
 * [ ] Add player health, damage, death, and game-over
-* [ ] Add close-range zap and area zap
 * [ ] Evaluate automatic projectile dodging
 
 **Milestone:** The mission feels like a complete action game.

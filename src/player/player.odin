@@ -1,7 +1,9 @@
-package main
+package player
 
 import rl "vendor:raylib"
 import b3 "vendor:box3d"
+import world "../world"
+import npc "../npc"
 import "core:math"
 import "core:c"
 
@@ -22,18 +24,17 @@ GROUND_CHECK_RADIUS   :: PLAYER_RADIUS * 0.9
 GROUND_CHECK_DISTANCE :: 0.12
 GROUND_NORMAL_MIN_Y   :: 0.5
 
-// Any sufficiently vertical surface can participate in sliding/bouncing.
-// This includes room walls, platform/road-bump faces, and enemy capsule sides.
-SURFACE_CHECK_RADIUS          :: PLAYER_RADIUS * 0.95
-SURFACE_CHECK_DISTANCE        :: 0.14
-SURFACE_NORMAL_MAX_Y          :: 0.5
-SURFACE_SLIDE_MIN_FALL_SPEED  :: 2.5
-SURFACE_JUMP_UP_SPEED         :: 7.0
-SURFACE_JUMP_AWAY_SPEED       :: 4.5
-SURFACE_RESTICK_COOLDOWN      :: 0.18
+WALL_CHECK_RADIUS          :: PLAYER_RADIUS * 0.95
+WALL_CHECK_DISTANCE        :: 0.14
+WALL_NORMAL_MAX_Y          :: 0.25
+WALL_SLIDE_START_GRAVITY   :: 1.0
+WALL_SLIDE_GRAVITY_RAMP    :: 10.0
+WALL_JUMP_UP_SPEED         :: 7.0
+WALL_JUMP_AWAY_SPEED       :: 4.5
+WALL_RESTICK_COOLDOWN      :: 0.18
 
-MAX_SURFACE_SMOKE_PARTICLES :: 64
-SURFACE_SMOKE_INTERVAL      :: 0.06
+MAX_WALL_SMOKE_PARTICLES :: 64
+WALL_SMOKE_INTERVAL      :: 0.06
 
 Player :: struct {
 	body_id: b3.BodyId,
@@ -44,21 +45,28 @@ Player :: struct {
 
 	dash_jump_active: bool,
 
-	surface_contact:          bool,
-	surface_normal:           rl.Vector3,
-	surface_contact_point:    rl.Vector3,
-	surface_restick_cooldown: f32,
-	surface_smoke_timer:      f32,
+	wall_sliding:          bool,
+	wall_normal:           rl.Vector3,
+	wall_contact_point:    rl.Vector3,
+	wall_slide_gravity:    f32,
+	wall_restick_cooldown: f32,
+	wall_smoke_timer:      f32,
 }
 
-Surface_Cast_Result :: struct {
+Wall_Cast_Result :: struct {
+	hit:    bool,
+	point:  rl.Vector3,
+	normal: rl.Vector3,
+}
+
+Ground_Cast_Result :: struct {
 	hit:      bool,
-	point:    rl.Vector3,
-	normal:   rl.Vector3,
+	shape_id: b3.ShapeId,
+	point:    b3.Pos,
 	fraction: f32,
 }
 
-Surface_Smoke_Particle :: struct {
+Wall_Smoke_Particle :: struct {
 	active:   bool,
 	position: rl.Vector3,
 	velocity: rl.Vector3,
@@ -69,10 +77,10 @@ Surface_Smoke_Particle :: struct {
 
 player: Player
 
-surface_smoke_particles : [MAX_SURFACE_SMOKE_PARTICLES]Surface_Smoke_Particle
+wall_smoke_particles: [MAX_WALL_SMOKE_PARTICLES]Wall_Smoke_Particle
 
 create_player :: proc(
-	world_id: b3.WorldId,
+	physics_world_id: b3.WorldId,
 ) -> Player {
 	body_def :=
 		b3.DefaultBodyDef()
@@ -96,7 +104,7 @@ create_player :: proc(
 
 	body_id :=
 		b3.CreateBody(
-			world_id,
+			physics_world_id,
 			body_def,
 		)
 
@@ -128,11 +136,26 @@ create_player :: proc(
 
 	return Player{
 		body_id = body_id,
+		wall_slide_gravity =
+			WALL_SLIDE_START_GRAVITY,
+	}
+}
+
+get_aim_origin :: proc() -> rl.Vector3 {
+	player_pos :=
+		b3.Body_GetPosition(
+			player.body_id,
+		)
+
+	return {
+		player_pos.x,
+		player_pos.y + PLAYER_EYE_HEIGHT,
+		player_pos.z,
 	}
 }
 
 draw_player :: proc() {
-	draw_surface_smoke()
+	draw_wall_smoke()
 
 	if !debug_camera_enabled &&
 	   !third_person_enabled {
@@ -182,7 +205,7 @@ draw_player :: proc() {
 }
 
 update_player :: proc() {
-	update_surface_smoke()
+	update_wall_smoke()
 
 	velocity :=
 		b3.Body_GetLinearVelocity(
@@ -235,21 +258,21 @@ update_player :: proc() {
 	player.dash_time_left =
 		max(
 			player.dash_time_left -
-				TIME_STEP,
+				world.TIME_STEP,
 			0,
 		)
 
 	player.dash_cooldown_left =
 		max(
 			player.dash_cooldown_left -
-				TIME_STEP,
+				world.TIME_STEP,
 			0,
 		)
 
-	player.surface_restick_cooldown =
+	player.wall_restick_cooldown =
 		max(
-			player.surface_restick_cooldown -
-				TIME_STEP,
+			player.wall_restick_cooldown -
+				world.TIME_STEP,
 			0,
 		)
 
@@ -271,61 +294,87 @@ update_player :: proc() {
 			PLAYER_DASH_COOLDOWN
 	}
 
-	/* Nearby blocking-surface detection.
-	   This is independent of movement input so airborne bounce still works
-	   when the player releases WASD before pressing Space. */
+	/* Wall detection */
 
-	player.surface_contact = false
+	was_wall_sliding :=
+		player.wall_sliding
 
-	if player.surface_restick_cooldown <= 0 {
-		surface_hit :=
-			find_player_blocking_surface()
+	player.wall_sliding =
+		false
 
-		if surface_hit.hit {
-			player.surface_contact = true
-			player.surface_normal = surface_hit.normal
-			player.surface_contact_point = surface_hit.point
+	if !grounded &&
+	   move_length > 0 &&
+	   player.wall_restick_cooldown <= 0 {
+		wall_hit :=
+			cast_player_wall(
+				move,
+			)
+
+		if wall_hit.hit {
+			player.wall_sliding =
+				true
+
+			player.wall_normal =
+				wall_hit.normal
+
+			player.wall_contact_point =
+				wall_hit.point
 		}
 	}
 
-	if grounded {
-		player.dash_jump_active = false
+	if player.wall_sliding &&
+	   !was_wall_sliding {
+		player.wall_slide_gravity =
+			WALL_SLIDE_START_GRAVITY
+
+		player.wall_smoke_timer = 0
 	}
 
-	/* Jump / surface bounce */
+	if grounded {
+		player.wall_sliding = false
+		player.wall_slide_gravity =
+			WALL_SLIDE_START_GRAVITY
+		player.dash_jump_active =
+			false
+	}
 
-	surface_jumped := false
+	/* Jump / wall bounce */
+
+	wall_jumped := false
 	jumped := false
 
 	if rl.IsKeyPressed(.SPACE) {
-		if !grounded &&
-		   player.surface_contact {
+		if player.wall_sliding {
 			velocity.y =
-				SURFACE_JUMP_UP_SPEED
+				WALL_JUMP_UP_SPEED
 
 			velocity.x =
-				player.surface_normal.x *
-				SURFACE_JUMP_AWAY_SPEED
+				player.wall_normal.x *
+				WALL_JUMP_AWAY_SPEED
 
 			velocity.z =
-				player.surface_normal.z *
-				SURFACE_JUMP_AWAY_SPEED
+				player.wall_normal.z *
+				WALL_JUMP_AWAY_SPEED
 
-			player.surface_contact = false
+			player.wall_sliding =
+				false
 
-			player.surface_restick_cooldown =
-				SURFACE_RESTICK_COOLDOWN
+			player.wall_restick_cooldown =
+				WALL_RESTICK_COOLDOWN
+
+			player.wall_slide_gravity =
+				WALL_SLIDE_START_GRAVITY
 
 			player.dash_jump_active =
 				false
 
-			spawn_surface_smoke(
-				player.surface_contact_point,
-				player.surface_normal,
+			spawn_wall_smoke(
+				player.wall_contact_point,
+				player.wall_normal,
 				10,
 			)
 
-			surface_jumped = true
+			wall_jumped = true
 		} else if grounded {
 			velocity.y =
 				PLAYER_JUMP_SPEED
@@ -342,9 +391,11 @@ update_player :: proc() {
 
 	/* Horizontal movement */
 
-	if !surface_jumped {
+	if !wall_jumped {
 		if player.dash_jump_active &&
 		   (jumped || !grounded) {
+			// Full action-game air control at dash speed.
+			// Releasing WASD stops horizontal travel immediately.
 			velocity.x =
 				move.x *
 				PLAYER_DASH_SPEED
@@ -369,104 +420,50 @@ update_player :: proc() {
 				move.z *
 				PLAYER_SPEED
 		}
-
-		// Explicitly remove only the component that pushes into a nearby
-		// blocking surface. Tangential velocity is preserved at full speed,
-		// so the player slides along walls, obstacle faces, and enemies instead
-		// of relying on Box3D's platform-dependent contact response.
-		horizontal_speed :=
-			math.sqrt(
-				velocity.x * velocity.x +
-				velocity.z * velocity.z,
-			)
-
-		if horizontal_speed > 0.0001 {
-			horizontal_direction :=
-				rl.Vector3{
-					velocity.x / horizontal_speed,
-					0,
-					velocity.z / horizontal_speed,
-				}
-
-			movement_hit :=
-				cast_player_blocking_surface(
-					horizontal_direction,
-				)
-
-			if movement_hit.hit {
-				normal :=
-					normalize_horizontal(
-						movement_hit.normal,
-					)
-
-				into_surface :=
-					velocity.x * normal.x +
-					velocity.z * normal.z
-
-				if into_surface < 0 {
-					velocity.x -=
-						normal.x *
-						into_surface
-
-					velocity.z -=
-						normal.z *
-						into_surface
-
-					projected_speed :=
-						math.sqrt(
-							velocity.x * velocity.x +
-							velocity.z * velocity.z,
-						)
-
-					// Keep full requested speed along the tangent. A direct
-					// push into the surface still correctly results in zero.
-					if projected_speed > 0.0001 {
-						scale :=
-							horizontal_speed /
-							projected_speed
-
-						velocity.x *= scale
-						velocity.z *= scale
-					}
-				}
-			}
-		}
 	}
 
-	/* Vertical surface slide.
-	   Keep a minimum downward speed so contacts cannot pin the player in
-	   place. This is deliberately generic rather than wall-specific. */
+	/* Wall slide */
 
-	if !grounded &&
-	   player.surface_contact &&
+	if player.wall_sliding &&
 	   velocity.y < 0 {
-		if velocity.y >
-		   -SURFACE_SLIDE_MIN_FALL_SPEED {
-			velocity.y =
-				-SURFACE_SLIDE_MIN_FALL_SPEED
-		}
+		player.wall_slide_gravity =
+			min(
+				player.wall_slide_gravity +
+					WALL_SLIDE_GRAVITY_RAMP *
+						world.TIME_STEP,
+				9.8,
+			)
 
-		player.surface_smoke_timer -=
-			TIME_STEP
+		// Box3D applies full gravity after this update. Compensate for
+		// part of it, with the compensation fading as stickiness is lost.
+		velocity.y +=
+			(
+				9.8 -
+				player.wall_slide_gravity
+			) *
+			world.TIME_STEP
 
-		if player.surface_smoke_timer <= 0 {
-			spawn_surface_smoke(
-				player.surface_contact_point,
-				player.surface_normal,
+		player.wall_smoke_timer -=
+			world.TIME_STEP
+
+		if player.wall_smoke_timer <= 0 {
+			spawn_wall_smoke(
+				player.wall_contact_point,
+				player.wall_normal,
 				2,
 			)
 
-			player.surface_smoke_timer =
-				SURFACE_SMOKE_INTERVAL
+			player.wall_smoke_timer =
+				WALL_SMOKE_INTERVAL
 		}
 	} else {
-		player.surface_smoke_timer = 0
+		player.wall_smoke_timer = 0
 	}
 
 	/* Flashfield hover */
 
 	if rl.IsMouseButtonDown(.RIGHT) &&
-	   !player.surface_contact &&
+	   !player.wall_sliding &&
 	   velocity.y < 0 {
 		// Flashfield is available even without a tagged enemy.
 		// Cancel most of the gravity Box3D will apply this frame.
@@ -474,7 +471,7 @@ update_player :: proc() {
 			9.8 *
 			(1.0 -
 				HOVER_GRAVITY_SCALE) *
-			TIME_STEP
+			world.TIME_STEP
 
 		if velocity.y <
 		   -HOVER_MAX_FALL_SPEED {
@@ -489,91 +486,35 @@ update_player :: proc() {
 	)
 }
 
-normalize_horizontal :: proc(
-	value: rl.Vector3,
-) -> rl.Vector3 {
-	length :=
-		math.sqrt(
-			value.x * value.x +
-			value.z * value.z,
-		)
-
-	if length <= 0.0001 {
-		return rl.Vector3{}
-	}
-
-	return rl.Vector3{
-		value.x / length,
-		0,
-		value.z / length,
-	}
-}
-
-find_player_blocking_surface :: proc() -> Surface_Cast_Result {
-	directions := [8]rl.Vector3{
-		{ 1, 0,  0},
-		{-1, 0,  0},
-		{ 0, 0,  1},
-		{ 0, 0, -1},
-		{ 0.7071068, 0,  0.7071068},
-		{-0.7071068, 0,  0.7071068},
-		{ 0.7071068, 0, -0.7071068},
-		{-0.7071068, 0, -0.7071068},
-	}
-
-	best := Surface_Cast_Result{
-		fraction = 2.0,
-	}
-
-	for direction in directions {
-		result :=
-			cast_player_blocking_surface(
-				direction,
-			)
-
-		if result.hit &&
-		   result.fraction < best.fraction {
-			best = result
-		}
-	}
-
-	return best
-}
-
-cast_player_blocking_surface :: proc(
+cast_player_wall :: proc(
 	direction: rl.Vector3,
-) -> Surface_Cast_Result {
+) -> Wall_Cast_Result {
 	player_pos :=
 		b3.Body_GetPosition(
 			player.body_id,
 		)
 
-	// Cast a capsule-shaped proxy instead of a single sphere so low obstacle
-	// faces and taller blockers are detected across the player's full body.
-	proxy_points := [2]b3.Vec3{
-		{0, -PLAYER_HALF_HEIGHT, 0},
-		{0,  PLAYER_HALF_HEIGHT, 0},
-	}
+	center := b3.Vec3{}
 
 	proxy := b3.ShapeProxy{
-		points = &proxy_points[0],
-		count  = 2,
+		points = &center,
+		count  = 1,
 		radius =
-			SURFACE_CHECK_RADIUS,
+			WALL_CHECK_RADIUS,
 	}
 
 	result :=
-		Surface_Cast_Result{}
+		Wall_Cast_Result{}
 
 	filter :=
 		b3.DefaultQueryFilter()
 
 	translation :=
 		direction *
-		SURFACE_CHECK_DISTANCE
+		WALL_CHECK_DISTANCE
 
 	_ = b3.World_CastShape(
-		world_id,
+		world.world_id,
 		{
 			player_pos.x,
 			player_pos.y,
@@ -586,14 +527,14 @@ cast_player_blocking_surface :: proc(
 			translation.z,
 		},
 		filter,
-		blocking_surface_cast_callback,
+		wall_cast_callback,
 		&result,
 	)
 
 	return result
 }
 
-blocking_surface_cast_callback :: proc "c" (
+wall_cast_callback :: proc "c" (
 	shape_id: b3.ShapeId,
 	point: b3.Pos,
 	normal: b3.Vec3,
@@ -608,36 +549,34 @@ blocking_surface_cast_callback :: proc "c" (
 			shape_id,
 		)
 
-	// Ignore only the player's own capsule. Enemy bodies intentionally count
-	// as blocking surfaces, exactly like level geometry.
-	if body_id == player.body_id {
+	if body_id == player.body_id ||
+	   npc.get_enemy_index_from_body(body_id) >= 0 {
 		return -1
 	}
 
-	// Floors and ceilings do not participate in horizontal surface sliding or
-	// wall-style bouncing. Steep/vertical faces do.
 	if normal.y >
-	   SURFACE_NORMAL_MAX_Y ||
+	   WALL_NORMAL_MAX_Y ||
 	   normal.y <
-	   -SURFACE_NORMAL_MAX_Y {
+	   -WALL_NORMAL_MAX_Y {
 		return -1
 	}
 
 	result :=
-		cast(^Surface_Cast_Result)ctx
+		cast(^Wall_Cast_Result)ctx
 
 	result.hit = true
+
 	result.point = {
 		point.x,
 		point.y,
 		point.z,
 	}
+
 	result.normal = {
 		normal.x,
 		normal.y,
 		normal.z,
 	}
-	result.fraction = fraction
 
 	return fraction
 }
@@ -675,13 +614,13 @@ is_player_grounded :: proc() -> bool {
 	}
 
 	result :=
-		Projectile_Cast_Result{}
+		Ground_Cast_Result{}
 
 	filter :=
 		b3.DefaultQueryFilter()
 
 	_ = b3.World_CastShape(
-		world_id,
+		world.world_id,
 		{
 			origin.x,
 			origin.y,
@@ -717,7 +656,7 @@ ground_cast_callback :: proc "c" (
 		)
 
 	if body_id == player.body_id ||
-	   get_enemy_index_from_body(body_id) >= 0 {
+	   npc.get_enemy_index_from_body(body_id) >= 0 {
 		return -1
 	}
 
@@ -727,7 +666,7 @@ ground_cast_callback :: proc "c" (
 	}
 
 	result :=
-		cast(^Projectile_Cast_Result)ctx
+		cast(^Ground_Cast_Result)ctx
 
 	result.hit = true
 	result.shape_id = shape_id
@@ -737,14 +676,14 @@ ground_cast_callback :: proc "c" (
 	return fraction
 }
 
-spawn_surface_smoke :: proc(
+spawn_wall_smoke :: proc(
 	contact: rl.Vector3,
 	normal: rl.Vector3,
 	count: int,
 ) {
 	for _ in 0..<count {
-		for i in 0..<MAX_SURFACE_SMOKE_PARTICLES {
-			if surface_smoke_particles[i].active {
+		for i in 0..<MAX_WALL_SMOKE_PARTICLES {
+			if wall_smoke_particles[i].active {
 				continue
 			}
 
@@ -785,8 +724,8 @@ spawn_surface_smoke :: proc(
 				) /
 					100.0
 
-			surface_smoke_particles[i] =
-				Surface_Smoke_Particle{
+			wall_smoke_particles[i] =
+				Wall_Smoke_Particle{
 					active = true,
 					position =
 						contact +
@@ -831,17 +770,17 @@ spawn_surface_smoke :: proc(
 	}
 }
 
-update_surface_smoke :: proc() {
-	for i in 0..<MAX_SURFACE_SMOKE_PARTICLES {
-		if !surface_smoke_particles[i].active {
+update_wall_smoke :: proc() {
+	for i in 0..<MAX_WALL_SMOKE_PARTICLES {
+		if !wall_smoke_particles[i].active {
 			continue
 		}
 
 		particle :=
-			&surface_smoke_particles[i]
+			&wall_smoke_particles[i]
 
 		particle.life -=
-			TIME_STEP
+			world.TIME_STEP
 
 		if particle.life <= 0 {
 			particle.active =
@@ -852,11 +791,11 @@ update_surface_smoke :: proc() {
 
 		particle.position +=
 			particle.velocity *
-			TIME_STEP
+			world.TIME_STEP
 
 		particle.velocity.y +=
 			0.5 *
-			TIME_STEP
+			world.TIME_STEP
 
 		particle.velocity.x *=
 			0.97
@@ -866,8 +805,8 @@ update_surface_smoke :: proc() {
 	}
 }
 
-draw_surface_smoke :: proc() {
-	for particle in surface_smoke_particles {
+draw_wall_smoke :: proc() {
+	for particle in wall_smoke_particles {
 		if !particle.active {
 			continue
 		}
@@ -894,4 +833,9 @@ draw_surface_smoke :: proc() {
 			},
 		)
 	}
+}
+
+
+reset_player_runtime_state :: proc() {
+	wall_smoke_particles = {}
 }
