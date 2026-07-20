@@ -25,8 +25,37 @@ camera_pitch: f32 = 0
 debug_camera_enabled := false
 third_person_enabled := false
 
+reset_camera :: proc() {
+	camera_yaw = 0
+	camera_pitch = 0
+
+	debug_camera_enabled = false
+	third_person_enabled = false
+
+	camera.position = get_aim_origin()
+	camera.target =
+		camera.position +
+		rl.Vector3{
+			0,
+			0,
+			-1,
+		}
+
+	camera.up = {0, 1, 0}
+	camera.fovy = 70
+	camera.projection = .PERSPECTIVE
+
+	// Discard any delta produced by cursor capture/window focus transitions.
+	mouse_delta_ignore_frames = 4
+}
+
 update_camera :: proc() {
 	mouse_delta := rl.GetMouseDelta()
+
+	if mouse_delta_ignore_frames > 0 {
+		mouse_delta_ignore_frames -= 1
+		mouse_delta = {}
+	}
 
 	// Traditional mode sends all mouse movement to the camera.
 	// Auto mode lets the floating reticle consume central movement first.
@@ -92,7 +121,6 @@ update_camera :: proc() {
 			get_aim_origin()
 	}
 
-	// Camera orientation is independent from the floating reticle.
 	camera.target =
 		camera.position +
 		forward

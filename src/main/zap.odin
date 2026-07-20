@@ -8,11 +8,11 @@ import "core:math"
 
 MAX_ZAP_ARCS                  :: GLOBAL_MAX_TAGS
 ZAP_BACKBONE_POINT_COUNT      :: 32
-ZAP_RENDER_POINT_COUNT        :: 48
+ZAP_RENDER_POINT_COUNT        :: 30
 ZAP_BACKBONE_REFRESH_INTERVAL :: 0.24
 ZAP_BACKBONE_MORPH_SPEED      :: 6.0
-ZAP_FINE_NOISE_AMPLITUDE      :: 0.115
-ZAP_FINE_NOISE_REFRESH        :: 0.045
+ZAP_FINE_NOISE_AMPLITUDE      :: 0.18
+ZAP_FINE_NOISE_REFRESH        :: 0.055
 ZAP_RING_RADIUS               :: FLASHFIELD_RADIUS * 0.82
 ZAP_ANCHOR_ROTATION_SPEED     :: 14.0
 ZAP_DAMAGE_PER_TAG_PER_SECOND :: 15.0
@@ -25,15 +25,14 @@ flashfield_active := false
 zap_active        := false
 zap_visual_time: f32
 
-zap_backbone_refresh_timer:
-	[MAX_ZAP_ARCS]f32
-
-zap_paths_initialized:
-	[MAX_ZAP_ARCS]bool
-
+zap_backbone_refresh_timer: [MAX_ZAP_ARCS]f32
+zap_paths_initialized: [MAX_ZAP_ARCS]bool
 zap_backbone_current: [MAX_ZAP_ARCS][ZAP_BACKBONE_POINT_COUNT]rl.Vector3
-
 zap_backbone_target: [MAX_ZAP_ARCS][ZAP_BACKBONE_POINT_COUNT]rl.Vector3
+
+zap_render_points: [MAX_ZAP_ARCS][ZAP_RENDER_POINT_COUNT]rl.Vector3
+zap_render_refresh_timer: [MAX_ZAP_ARCS]f32
+zap_render_initialized: [MAX_ZAP_ARCS]bool
 
 Zap_Cast_Result :: struct {
 	hit:      bool,
@@ -53,6 +52,10 @@ invalidate_zap_paths :: proc() {
 	zap_paths_initialized = {}
 	zap_backbone_current = {}
 	zap_backbone_target = {}
+
+	zap_render_points = {}
+	zap_render_refresh_timer = {}
+	zap_render_initialized = {}
 }
 
 reset_zap_state :: proc() {
@@ -116,6 +119,22 @@ update_zap :: proc() {
 		update_zap_backbone(
 			slot,
 		)
+
+		zap_render_refresh_timer[slot] -=
+			TIME_STEP
+
+		if !zap_render_initialized[slot] ||
+		   zap_render_refresh_timer[slot] <= 0 {
+			generate_zap_render_points(
+				slot,
+			)
+
+			zap_render_refresh_timer[slot] =
+				ZAP_FINE_NOISE_REFRESH
+
+			zap_render_initialized[slot] =
+				true
+		}
 	}
 
 	// Damage is calculated from each enemy's derived global tag count.
@@ -159,6 +178,16 @@ initialize_zap_path :: proc(
 
 	zap_backbone_refresh_timer[slot] =
 		ZAP_BACKBONE_REFRESH_INTERVAL
+
+	generate_zap_render_points(
+		slot,
+	)
+
+	zap_render_refresh_timer[slot] =
+		ZAP_FINE_NOISE_REFRESH
+
+	zap_render_initialized[slot] =
+		true
 }
 
 generate_zap_backbone_target :: proc(
@@ -359,14 +388,9 @@ find_zap_route :: proc(
 		node_count += 1
 	}
 
-	distances:
-		[MAX_ZAP_ROUTE_NODES]f32
-
-	previous:
-		[MAX_ZAP_ROUTE_NODES]int
-
-	visited:
-		[MAX_ZAP_ROUTE_NODES]bool
+	distances: [MAX_ZAP_ROUTE_NODES]f32
+	previous: [MAX_ZAP_ROUTE_NODES]int
+	visited: [MAX_ZAP_ROUTE_NODES]bool
 
 	for i in 0..<node_count {
 		distances[i] = 1.0e30
@@ -735,6 +759,14 @@ update_zap_backbone :: proc(
 
 	zap_backbone_target[slot][ZAP_BACKBONE_POINT_COUNT - 1] =
 		target
+
+	if zap_render_initialized[slot] {
+		zap_render_points[slot][0] =
+			anchor
+
+		zap_render_points[slot][ZAP_RENDER_POINT_COUNT - 1] =
+			target
+	}
 }
 
 draw_zap_arc_segments :: proc(
@@ -753,31 +785,11 @@ draw_zap_arc_segments :: proc(
 		}
 
 		for i in 0..<ZAP_RENDER_POINT_COUNT - 1 {
-			t0 :=
-				f32(i) /
-				f32(
-					ZAP_RENDER_POINT_COUNT -
-						1,
-				)
-
-			t1 :=
-				f32(i + 1) /
-				f32(
-					ZAP_RENDER_POINT_COUNT -
-						1,
-				)
-
 			segment_start :=
-				get_zap_strand_point(
-					slot,
-					t0,
-				)
+				zap_render_points[slot][i]
 
 			segment_end :=
-				get_zap_strand_point(
-					slot,
-					t1,
-				)
+				zap_render_points[slot][i + 1]
 
 			if glow_pass {
 				draw_zap_glow_segment(
@@ -846,14 +858,14 @@ draw_zap_glow_segment :: proc(
 	rl.DrawCylinderEx(
 		start,
 		end,
-		0.042,
-		0.042,
+		0.050,
+		0.050,
 		6,
 		rl.Color{
 			20,
 			110,
 			255,
-			75,
+			90,
 		},
 	)
 }
@@ -872,8 +884,8 @@ draw_zap_core_segment :: proc(
 	rl.DrawCylinderEx(
 		start,
 		end,
-		0.024,
-		0.024,
+		0.032,
+		0.032,
 		6,
 		rl.Color{
 			20,
@@ -886,8 +898,8 @@ draw_zap_core_segment :: proc(
 	rl.DrawCylinderEx(
 		start,
 		end,
-		0.010,
-		0.010,
+		0.014,
+		0.014,
 		5,
 		rl.Color{
 			245,
@@ -898,183 +910,182 @@ draw_zap_core_segment :: proc(
 	)
 }
 
-zap_hash_noise :: proc(
-	value: f32,
-) -> f32 {
-	raw :=
-		math.sin(
-			value *
-				12.9898,
-		) *
-		43758.5453
-
-	fraction :=
-		raw -
-		math.floor(
-			raw,
-		)
-
-	return (
-		fraction *
-			2.0 -
-		1.0
-	)
-}
-
-get_zap_strand_point :: proc(
+generate_zap_render_points :: proc(
 	slot: int,
-	t: f32,
-) -> rl.Vector3 {
-	base :=
-		sample_zap_backbone(
-			slot,
-			t,
-		)
-
-	// Keep both endpoints exactly attached to Flashfield anchor and target.
-	if t <= 0.0001 ||
-	   t >= 0.9999 {
-		return base
+) {
+	if slot < 0 ||
+	   slot >= tag_slot_count {
+		return
 	}
 
-	prev_t :=
-		max(
-			t -
-				0.02,
-			0.0,
-		)
+	enemy_index :=
+		tag_slots[slot]
 
-	next_t :=
-		min(
-			t +
-				0.02,
-			1.0,
-		)
-
-	tangent :=
-		normalize_vector3(
-			sample_zap_backbone(
-				slot,
-				next_t,
-			) -
-			sample_zap_backbone(
-				slot,
-				prev_t,
-			),
-		)
-
-	world_up :=
-		rl.Vector3{
-			0,
-			1,
-			0,
-		}
-
-	right :=
-		rl.Vector3CrossProduct(
-			world_up,
-			tangent,
-		)
-
-	if vector3_length_squared(
-		right,
-	) <= 0.0001 {
-		right = {
-			1,
-			0,
-			0,
-		}
+	if enemy_index < 0 ||
+	   enemy_index >= MAX_ENEMIES ||
+	   !enemies[enemy_index].active ||
+	   !enemies[enemy_index].alive {
+		return
 	}
 
-	right =
-		normalize_vector3(
-			right,
-		)
-
-	up :=
-		normalize_vector3(
-			rl.Vector3CrossProduct(
-				tangent,
-				right,
-			),
-		)
-
-	envelope :=
-		4.0 *
-		t *
-		(1.0 - t)
-
-	// Use the current render-point index and a rapidly changing time step.
-	// Adjacent points receive independent offsets, producing actual sharp
-	// lightning zigzags instead of smooth sine-wave ribbons.
-	point_index :=
-		int(
-			t *
+	for i in 0..<ZAP_RENDER_POINT_COUNT {
+		t :=
+			f32(i) /
 			f32(
 				ZAP_RENDER_POINT_COUNT -
 					1,
-			) +
-			0.5,
-		)
+			)
 
-	noise_frame :=
-		int(
-			zap_visual_time /
-			ZAP_FINE_NOISE_REFRESH,
-		)
+		base :=
+			sample_zap_backbone(
+				slot,
+				t,
+			)
 
-	seed :=
-		f32(
-			point_index *
-				37 +
-			slot *
-				101 +
-			noise_frame *
-				211,
-		)
+		if i == 0 ||
+		   i == ZAP_RENDER_POINT_COUNT - 1 {
+			zap_render_points[slot][i] =
+				base
+			continue
+		}
 
-	noise_a :=
-		zap_hash_noise(
-			seed +
-				3.17,
-		)
+		prev_t :=
+			max(
+				t -
+					0.035,
+				0.0,
+			)
 
-	noise_b :=
-		zap_hash_noise(
-			seed +
-				17.43,
-		)
+		next_t :=
+			min(
+				t +
+					0.035,
+				1.0,
+			)
 
-	offset :=
-		right *
-			noise_a *
-			ZAP_FINE_NOISE_AMPLITUDE *
-			envelope +
-		up *
-			noise_b *
+		tangent :=
+			normalize_vector3(
+				sample_zap_backbone(
+					slot,
+					next_t,
+				) -
+				sample_zap_backbone(
+					slot,
+					prev_t,
+				),
+			)
+
+		world_up :=
+			rl.Vector3{
+				0,
+				1,
+				0,
+			}
+
+		right :=
+			rl.Vector3CrossProduct(
+				world_up,
+				tangent,
+			)
+
+		if vector3_length_squared(
+			right,
+		) <= 0.0001 {
+			right =
+				rl.Vector3{
+					1,
+					0,
+					0,
+				}
+		}
+
+		right =
+			normalize_vector3(
+				right,
+			)
+
+		up :=
+			normalize_vector3(
+				rl.Vector3CrossProduct(
+					tangent,
+					right,
+				),
+			)
+
+		envelope :=
+			4.0 *
+			t *
+			(1.0 - t)
+
+		zigzag_sign: f32 = 1.0
+
+		if i % 2 == 0 {
+			zigzag_sign = -1.0
+		}
+
+		side_scale :=
+			0.70 +
+			f32(
+				rl.GetRandomValue(
+					0,
+					100,
+				),
+			) /
+				100.0 *
+				0.55
+
+		side_offset :=
+			zigzag_sign *
+			side_scale *
 			ZAP_FINE_NOISE_AMPLITUDE *
 			envelope
 
-	candidate :=
-		base +
-		offset
+		vertical_offset :=
+			random_zap_offset() *
+			ZAP_FINE_NOISE_AMPLITUDE *
+			0.60 *
+			envelope
 
-	hit :=
-		cast_zap_environment(
-			base,
-			candidate -
+		candidate :=
+			base +
+			right *
+				side_offset +
+			up *
+				vertical_offset
+
+		// Keep the local visual jitter outside geometry.
+		offset_hit :=
+			cast_zap_environment(
 				base,
-		)
+				candidate -
+					base,
+			)
 
-	if hit.hit {
-		return (
-			hit.point +
-			hit.normal *
-				ZAP_OBSTACLE_CLEARANCE
-		)
+		if offset_hit.hit {
+			candidate =
+				base
+		}
+
+		// Also make sure the segment from the previous cached lightning point
+		// to this one does not cut through a wall.
+		previous :=
+			zap_render_points[slot][i - 1]
+
+		segment_hit :=
+			cast_zap_environment(
+				previous,
+				candidate -
+					previous,
+			)
+
+		if segment_hit.hit {
+			candidate =
+				base
+		}
+
+		zap_render_points[slot][i] =
+			candidate
 	}
-
-	return candidate
 }
 
 sample_zap_backbone :: proc(

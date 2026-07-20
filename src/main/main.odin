@@ -21,6 +21,8 @@ create_game_world :: proc() {
 			world_def,
 		)
 
+	world_initialized = true
+
 	player =
 		create_player(
 			world_id,
@@ -39,6 +41,43 @@ create_game_world :: proc() {
 	}
 }
 
+destroy_game_world :: proc() {
+	if !world_initialized {
+		return
+	}
+
+	b3.DestroyWorld(
+		world_id,
+	)
+
+	world_initialized = false
+}
+
+reset_runtime_gameplay_state :: proc() {
+	projectiles = {}
+	surface_smoke_particles = {}
+
+	reset_aiming_state()
+	reset_zap_state()
+	reset_camera()
+}
+
+start_new_game :: proc() {
+	destroy_game_world()
+	create_game_world()
+	reset_runtime_gameplay_state()
+	enter_playing_state()
+}
+
+leave_game_to_main_menu :: proc() {
+	destroy_game_world()
+
+	projectiles = {}
+	surface_smoke_particles = {}
+
+	show_main_menu()
+}
+
 init :: proc() {
 	rl.InitWindow(
 		1280,
@@ -52,90 +91,123 @@ init :: proc() {
 		FRAMERATE,
 	)
 
-	rl.DisableCursor()
 	rl.SetExitKey(.KEY_NULL)
 
-	create_game_world()
-	reset_aiming_state()
-	reset_zap_state()
+	// Do not capture the mouse at application startup. The main menu owns a
+	// normal cursor, and gameplay captures it only after Start/Continue.
+	rl.EnableCursor()
+
+	show_main_menu()
+}
+
+update_gameplay :: proc() {
+	update_aim_mode_input()
+
+	if rl.IsKeyPressed(.F2) {
+		toggle_third_person_camera()
+	}
+
+	if rl.IsKeyPressed(.F3) {
+		toggle_debug_camera()
+	}
+
+	if rl.IsKeyPressed(.F4) {
+		toggle_aim_debug_rays()
+	}
+
+	if rl.IsKeyPressed(.F5) {
+		toggle_enemy_auto_respawn()
+	}
+
+	if !debug_camera_enabled {
+		update_player()
+	}
+
+	b3.World_Step(
+		world_id,
+		TIME_STEP,
+		SUB_STEP_COUNT,
+	)
+
+	update_camera()
+	update_aiming()
+
+	if !debug_camera_enabled {
+		shoot_projectile()
+		update_zap()
+	} else {
+		flashfield_active = false
+		zap_active = false
+	}
+
+	update_projectiles()
+	update_enemies()
 }
 
 loop :: proc() {
 	for game_running &&
 	    !rl.WindowShouldClose() {
-		if rl.IsKeyPressed(.ESCAPE) {
-			toggle_pause()
-		}
+		update_window_and_cursor_state()
 
-		if !paused {
-			update_aim_mode_input()
-
-			if rl.IsKeyPressed(.F2) {
-				toggle_third_person_camera()
+		switch game_screen {
+		case .PLAYING:
+			if rl.IsKeyPressed(.ESCAPE) {
+				pause_game()
 			}
 
-			if rl.IsKeyPressed(.F3) {
-				toggle_debug_camera()
+			if game_screen == .PLAYING {
+				update_gameplay()
 			}
 
-			if rl.IsKeyPressed(.F4) {
-				toggle_aim_debug_rays()
+		case .PAUSED:
+			if rl.IsKeyPressed(.ESCAPE) {
+				resume_game()
 			}
 
-			if rl.IsKeyPressed(.F5) {
-				toggle_enemy_auto_respawn()
+		case .OPTIONS:
+			if rl.IsKeyPressed(.ESCAPE) {
+				close_options_menu()
 			}
 
-			if !debug_camera_enabled {
-				update_player()
-			}
-
-			b3.World_Step(
-				world_id,
-				TIME_STEP,
-				SUB_STEP_COUNT,
-			)
-
-			update_camera()
-			update_aiming()
-
-			if !debug_camera_enabled {
-				shoot_projectile()
-				update_zap()
-			} else {
-				flashfield_active = false
-				zap_active = false
-			}
-
-			update_projectiles()
-			update_enemies()
+		case .MAIN_MENU:
 		}
 
 		rl.BeginDrawing()
+
 		rl.ClearBackground(
 			rl.RAYWHITE,
 		)
 
-		rl.BeginMode3D(
-			camera,
-		)
+		if world_initialized {
+			rl.BeginMode3D(
+				camera,
+			)
 
-		{
-			defer rl.EndMode3D()
+			{
+				defer rl.EndMode3D()
 
-			draw_room()
-			draw_enemies()
-			draw_player()
-			draw_projectiles()
-			draw_flashfield()
-			draw_gun()
-			draw_zap_arcs()
-			draw_aim_debug_ray()
+				draw_room()
+				draw_enemies()
+				draw_player()
+				draw_projectiles()
+				draw_flashfield()
+				draw_gun()
+				draw_zap_arcs()
+				draw_aim_debug_ray()
+			}
 		}
 
-		if paused {
-			draw_pause_menu()
-		} else {
+		switch game_screen {
+		case .MAIN_MENU:
+			draw_main_menu()
+
+		case .OPTIONS:
+			draw_options_menu()
+
+		case .PAUSED:
+			draw_pause_screen()
+
+		case .PLAYING:
 			draw_free_aim_debug_ellipse()
 			draw_crosshair()
 			draw_auto_aim_target()
@@ -162,24 +234,16 @@ loop :: proc() {
 }
 
 shutdown :: proc() {
-	b3.DestroyWorld(
-		world_id,
-	)
+	destroy_game_world()
 
 	shutdown_flashfield()
 	rl.CloseWindow()
 }
 
 restart_game :: proc() {
-	b3.DestroyWorld(
-		world_id,
-	)
-
-	projectiles = {}
-	surface_smoke_particles = {}
+	destroy_game_world()
 
 	create_game_world()
-
-	reset_aiming_state()
-	reset_zap_state()
+	reset_runtime_gameplay_state()
+	enter_playing_state()
 }
